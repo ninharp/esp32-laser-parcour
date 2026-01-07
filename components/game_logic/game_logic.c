@@ -1,0 +1,365 @@
+/**
+ * Game Logic Component - Implementation
+ * 
+ * Manages game state, scoring, timing, and game modes.
+ * 
+ * @author ninharp
+ * @date 2025
+ */
+
+#include "game_logic.h"
+#include "esp_log.h"
+#include "esp_err.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+#include <string.h>
+
+static const char *TAG = "GAME_LOGIC";
+
+// Global game state
+static game_state_t current_state = GAME_STATE_IDLE;
+static player_data_t current_player = {0};
+static game_stats_t statistics = {0};
+static game_config_t configuration = {
+    .mode = GAME_MODE_SINGLE_SPEEDRUN,
+    .duration = 180,            // 3 minutes default
+    .penalty_time = 5,          // 5 seconds penalty
+    .countdown_time = 5,        // 5 second countdown
+    .base_score = 1000,
+    .time_bonus_mult = 10,
+    .penalty_points = -50,
+    .max_players = 8
+};
+
+// Mutex for thread-safe access
+static SemaphoreHandle_t game_mutex = NULL;
+
+/**
+ * Initialize game logic component
+ */
+esp_err_t game_logic_init(void)
+{
+    ESP_LOGI(TAG, "Initializing game logic...");
+    
+    // Create mutex for thread-safe access
+    game_mutex = xSemaphoreCreateMutex();
+    if (game_mutex == NULL) {
+        ESP_LOGE(TAG, "Failed to create mutex");
+        return ESP_FAIL;
+    }
+    
+    // Initialize game state
+    current_state = GAME_STATE_IDLE;
+    memset(&current_player, 0, sizeof(player_data_t));
+    
+    // TODO: Load statistics from NVS
+    
+    ESP_LOGI(TAG, "Game logic initialized successfully");
+    return ESP_OK;
+}
+
+/**
+ * Start a new game
+ */
+esp_err_t game_start(game_mode_t mode, const char *player_name)
+{
+    if (xSemaphoreTake(game_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to acquire mutex");
+        return ESP_FAIL;
+    }
+    
+    // Check if game is already running
+    if (current_state == GAME_STATE_RUNNING || current_state == GAME_STATE_COUNTDOWN) {
+        ESP_LOGW(TAG, "Game already running");
+        xSemaphoreGive(game_mutex);
+        return ESP_FAIL;
+    }
+    
+    // Initialize player data
+    memset(&current_player, 0, sizeof(player_data_t));
+    current_player.player_id = 1;
+    if (player_name) {
+        strncpy(current_player.name, player_name, sizeof(current_player.name) - 1);
+    } else {
+        strcpy(current_player.name, "Player 1");
+    }
+    current_player.start_time = (uint32_t)(esp_timer_get_time() / 1000);
+    current_player.is_active = true;
+    
+    // Set game mode
+    configuration.mode = mode;
+    
+    // Change state to countdown
+    current_state = GAME_STATE_COUNTDOWN;
+    
+    ESP_LOGI(TAG, "Game starting - Mode: %d, Player: %s", mode, current_player.name);
+    
+    xSemaphoreGive(game_mutex);
+    
+    // TODO: Trigger countdown on display
+    // TODO: Notify ESP-NOW peers
+    
+    return ESP_OK;
+}
+
+/**
+ * Stop the current game
+ */
+esp_err_t game_stop(void)
+{
+    if (xSemaphoreTake(game_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to acquire mutex");
+        return ESP_FAIL;
+    }
+    
+    if (current_state == GAME_STATE_IDLE) {
+        ESP_LOGW(TAG, "No game running");
+        xSemaphoreGive(game_mutex);
+        return ESP_FAIL;
+    }
+    
+    // Record end time
+    current_player.end_time = (uint32_t)(esp_timer_get_time() / 1000);
+    current_player.elapsed_time = current_player.end_time - current_player.start_time;
+    
+    // Calculate final score
+    current_player.score = game_calculate_score(
+        current_player.elapsed_time,
+        current_player.beam_breaks
+    );
+    
+    // Update statistics
+    statistics.total_games++;
+    statistics.total_beam_breaks += current_player.beam_breaks;
+    statistics.total_playtime += current_player.elapsed_time;
+    
+    if (statistics.best_time == 0 || current_player.elapsed_time < statistics.best_time) {
+        statistics.best_time = current_player.elapsed_time;
+    }
+    if (current_player.elapsed_time > statistics.worst_time) {
+        statistics.worst_time = current_player.elapsed_time;
+    }
+    statistics.avg_time = statistics.total_playtime / statistics.total_games;
+    
+    // Change state
+    current_state = GAME_STATE_COMPLETE;
+    current_player.is_active = false;
+    
+    ESP_LOGI(TAG, "Game stopped - Time: %lu ms, Beam Breaks: %d, Score: %ld",
+             current_player.elapsed_time, current_player.beam_breaks, current_player.score);
+    
+    xSemaphoreGive(game_mutex);
+    
+    // TODO: Save statistics to NVS
+    // TODO: Display results on OLED
+    // TODO: Notify ESP-NOW peers
+    
+    return ESP_OK;
+}
+
+/**
+ * Pause the current game
+ */
+esp_err_t game_pause(void)
+{
+    if (xSemaphoreTake(game_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    
+    if (current_state != GAME_STATE_RUNNING) {
+        xSemaphoreGive(game_mutex);
+        return ESP_FAIL;
+    }
+    
+    current_state = GAME_STATE_PAUSED;
+    ESP_LOGI(TAG, "Game paused");
+    
+    xSemaphoreGive(game_mutex);
+    return ESP_OK;
+}
+
+/**
+ * Resume a paused game
+ */
+esp_err_t game_resume(void)
+{
+    if (xSemaphoreTake(game_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    
+    if (current_state != GAME_STATE_PAUSED) {
+        xSemaphoreGive(game_mutex);
+        return ESP_FAIL;
+    }
+    
+    current_state = GAME_STATE_RUNNING;
+    ESP_LOGI(TAG, "Game resumed");
+    
+    xSemaphoreGive(game_mutex);
+    return ESP_OK;
+}
+
+/**
+ * Register a beam break event
+ */
+esp_err_t game_beam_broken(uint8_t sensor_id)
+{
+    if (xSemaphoreTake(game_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    
+    if (current_state != GAME_STATE_RUNNING) {
+        xSemaphoreGive(game_mutex);
+        return ESP_FAIL;
+    }
+    
+    // Increment beam break counter
+    current_player.beam_breaks++;
+    
+    // Enter penalty state (unless in training mode)
+    if (configuration.mode != GAME_MODE_TRAINING) {
+        current_state = GAME_STATE_PENALTY;
+    }
+    
+    ESP_LOGI(TAG, "Beam broken! Sensor: %d, Total breaks: %d", 
+             sensor_id, current_player.beam_breaks);
+    
+    xSemaphoreGive(game_mutex);
+    
+    // TODO: Trigger penalty sound/display
+    // TODO: Apply time penalty if applicable
+    
+    return ESP_OK;
+}
+
+/**
+ * Get current game state
+ */
+game_state_t game_get_state(void)
+{
+    return current_state;
+}
+
+/**
+ * Get current player data
+ */
+esp_err_t game_get_player_data(player_data_t *player_data)
+{
+    if (!player_data) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    if (xSemaphoreTake(game_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    
+    memcpy(player_data, &current_player, sizeof(player_data_t));
+    
+    xSemaphoreGive(game_mutex);
+    return ESP_OK;
+}
+
+/**
+ * Get game statistics
+ */
+esp_err_t game_get_stats(game_stats_t *stats)
+{
+    if (!stats) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    if (xSemaphoreTake(game_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    
+    memcpy(stats, &statistics, sizeof(game_stats_t));
+    
+    xSemaphoreGive(game_mutex);
+    return ESP_OK;
+}
+
+/**
+ * Get game configuration
+ */
+esp_err_t game_get_config(game_config_t *config)
+{
+    if (!config) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    if (xSemaphoreTake(game_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    
+    memcpy(config, &configuration, sizeof(game_config_t));
+    
+    xSemaphoreGive(game_mutex);
+    return ESP_OK;
+}
+
+/**
+ * Set game configuration
+ */
+esp_err_t game_set_config(const game_config_t *config)
+{
+    if (!config) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    if (xSemaphoreTake(game_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    
+    memcpy(&configuration, config, sizeof(game_config_t));
+    
+    ESP_LOGI(TAG, "Configuration updated");
+    
+    xSemaphoreGive(game_mutex);
+    return ESP_OK;
+}
+
+/**
+ * Calculate final score
+ */
+int32_t game_calculate_score(uint32_t elapsed_time, uint16_t beam_breaks)
+{
+    int32_t score = configuration.base_score;
+    
+    // Add time bonus (faster completion = higher score)
+    uint32_t time_seconds = elapsed_time / 1000;
+    uint32_t time_remaining = (configuration.duration > time_seconds) ? 
+                               (configuration.duration - time_seconds) : 0;
+    score += (int32_t)(time_remaining * configuration.time_bonus_mult);
+    
+    // Subtract penalty points
+    score += (int32_t)(beam_breaks * configuration.penalty_points);
+    
+    // Ensure score doesn't go negative
+    if (score < 0) {
+        score = 0;
+    }
+    
+    return score;
+}
+
+/**
+ * Reset game statistics
+ */
+esp_err_t game_reset_stats(void)
+{
+    if (xSemaphoreTake(game_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    
+    memset(&statistics, 0, sizeof(game_stats_t));
+    
+    ESP_LOGI(TAG, "Statistics reset");
+    
+    xSemaphoreGive(game_mutex);
+    
+    // TODO: Clear NVS statistics
+    
+    return ESP_OK;
+}
