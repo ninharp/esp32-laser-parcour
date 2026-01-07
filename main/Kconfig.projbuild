@@ -7,20 +7,16 @@ menu "Laser Parcour Configuration"
             Select the role of this module in the laser parcour system.
 
         config MODULE_ROLE_CONTROL
-            bool "Control Module"
+            bool "Main Unit"
             help
                 Central game controller managing game state and coordination.
                 Runs web server and OLED display.
 
         config MODULE_ROLE_LASER
-            bool "Laser Module"
+            bool "Laser Unit"
             help
-                Laser emitter module that controls laser diode.
-
-        config MODULE_ROLE_SENSOR
-            bool "Sensor Module"
-            help
-                Sensor module that detects laser beam interruptions.
+                Combined laser emitter and sensor unit that controls laser diode
+                and detects beam interruptions.
     endchoice
 
     config MODULE_ID
@@ -29,9 +25,11 @@ menu "Laser Parcour Configuration"
         default 1
         help
             Unique identifier for this module (1-255).
-            Control module typically uses ID 1.
-            Laser modules use IDs 2-9.
-            Sensor modules use IDs 10-19.
+            Main Unit typically uses ID 1.
+            Laser Units use IDs 2-20.
+            
+            Note: If migrating from a previous version where sensors and lasers
+            were separate, you may need to reconfigure module IDs.
 
     config DEVICE_NAME
         string "Device Name"
@@ -226,21 +224,22 @@ menu "Laser Parcour Configuration"
             default 2
             depends on MODULE_ROLE_LASER
             help
-                GPIO pin for status LED on laser module.
+                GPIO pin for status LED on laser unit.
 
         config SENSOR_PIN
             int "Photoresistor ADC Pin"
             range 0 4
             default 0
-            depends on MODULE_ROLE_SENSOR
+            depends on MODULE_ROLE_LASER
             help
                 ADC channel for photoresistor (GPIO0-4 = ADC1_CH0-4).
+                The sensor is integrated in the laser unit.
 
         config SENSOR_LED_GREEN_PIN
             int "Sensor Green LED Pin"
             range 0 21
             default 1
-            depends on MODULE_ROLE_SENSOR
+            depends on MODULE_ROLE_LASER
             help
                 GPIO pin for green status LED (beam detected).
 
@@ -248,7 +247,7 @@ menu "Laser Parcour Configuration"
             int "Sensor Red LED Pin"
             range 0 21
             default 2
-            depends on MODULE_ROLE_SENSOR
+            depends on MODULE_ROLE_LASER
             help
                 GPIO pin for red status LED (beam broken).
 
@@ -256,7 +255,7 @@ menu "Laser Parcour Configuration"
             int "Beam Detection Threshold"
             range 0 4095
             default 500
-            depends on MODULE_ROLE_SENSOR
+            depends on MODULE_ROLE_LASER
             help
                 ADC threshold for detecting beam break (0-4095, 12-bit ADC).
                 Lower values = more sensitive. Adjust based on ambient light.
