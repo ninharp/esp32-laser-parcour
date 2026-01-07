@@ -184,8 +184,8 @@ esp_err_t display_update(void)
 **Hauptfunktionen:**
 ```c
 esp_err_t game_logic_init(void)
-esp_err_t game_start(game_mode_t mode, const char *player_name)
-esp_err_t game_stop(void)
+esp_err_t game_start(game_mode_t mode, const char *player_name)  // Broadcasts MSG_GAME_START
+esp_err_t game_stop(void)                                         // Broadcasts MSG_GAME_STOP
 esp_err_t game_pause(void)
 esp_err_t game_resume(void)
 esp_err_t game_beam_broken(uint8_t sensor_id)
@@ -197,8 +197,8 @@ esp_err_t game_set_config(const game_config_t *config)
 **Game States:**
 - GAME_STATE_IDLE - System bereit
 - GAME_STATE_READY - Bereit für Start
-- GAME_STATE_COUNTDOWN - Countdown läuft
-- GAME_STATE_RUNNING - Spiel aktiv
+- GAME_STATE_COUNTDOWN - Countdown läuft (aktuell übersprungen im Web Interface)
+- GAME_STATE_RUNNING - Spiel aktiv (nach game_start direkt aktiv)
 - GAME_STATE_PENALTY - Penalty Mode
 - GAME_STATE_PAUSED - Pausiert
 - GAME_STATE_COMPLETE - Beendet
@@ -639,6 +639,7 @@ CONFIG_SENSOR_LED_RED_PIN=2
      - MSG_GAME_START → Laser einschalten
      - MSG_GAME_STOP → Laser ausschalten
      - MSG_LASER_ON/OFF → Laser steuern
+     - MSG_RESET → Laser ausschalten, LEDs aus, Pairing zurücksetzen
 
 5. **LED Feedback:**
    - Status-LED: Pairing-Status / Laser aktiv
@@ -647,7 +648,47 @@ CONFIG_SENSOR_LED_RED_PIN=2
 
 ---
 
-## 🐛 Debugging
+## � Bekannte Fixes und Lösungen
+
+### ESP-NOW Pairing Issues
+
+**Problem:** ESP_ERR_ESPNOW_IF beim Senden von Messages
+**Ursache:** WiFi war nur im AP-Modus, ESP-NOW benötigt STA-Interface
+**Lösung:**
+1. Main Unit WiFi explizit in APSTA-Modus setzen BEVOR wifi_connect_with_fallback()
+2. wifi_ap_init() modifiziert um APSTA-Modus zu erhalten wenn bereits gesetzt
+
+**Code-Änderungen:**
+- `main/main.c`: WiFi APSTA-Init vor wifi_connect_with_fallback()
+- `wifi_ap_manager.c`: Prüfung auf aktuellen WiFi-Modus vor set_mode(WIFI_MODE_AP)
+
+### Game Start Broadcasting
+
+**Problem:** game_start() änderte State aber sendete keine Messages an Laser Units
+**Lösung:** game_start() ruft espnow_broadcast_message(MSG_GAME_START) auf
+**Status:** RUNNING-State wird direkt gesetzt (kein COUNTDOWN für Web-Interface)
+
+### Laser Unit MSG_RESET Support
+
+**Problem:** Laser Unit kannte MSG_RESET (0x0C) nicht → "Unknown message type"
+**Lösung:** MSG_RESET Handler hinzugefügt:
+- Laser ausschalten
+- Alle LEDs ausschalten  
+- is_paired auf false setzen
+- Pairing-Timer neu starten wenn nötig
+
+### Web Interface Unit Status
+
+**Problem:** Webinterface zeigt Units als "offline" obwohl verbunden
+**TODO:** 
+- [ ] Unit Status Tracking verbessern
+- [ ] Heartbeat Messages implementieren
+- [ ] Web API für Unit-Status erweitern
+- [ ] Message Box im Web-Interface entfernen (Status wird direkt aktualisiert)
+
+---
+
+## �🐛 Debugging
 
 ### Log-Levels
 
@@ -821,3 +862,4 @@ Dieses Dokument beschreibt die vollständige Architektur eines ESP32-basierten L
 4. Log-Ausgaben mit passenden TAG und Level
 5. Komponenten-Abhängigkeiten in CMakeLists.txt aktualisieren
 6. Kconfig-Optionen für neue Features hinzufügen
+7. **WICHTIG: Diese copilot-instructions.md Datei IMMER aktuell halten bei Änderungen an Code, Architektur oder Features!**
