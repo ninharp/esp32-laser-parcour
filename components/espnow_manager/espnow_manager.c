@@ -134,6 +134,7 @@ esp_err_t espnow_send_message(const uint8_t *dest_mac, espnow_msg_type_t msg_typ
     // Build message
     espnow_message_t msg = {0};
     msg.msg_type = msg_type;
+    // Note: CONFIG_MODULE_ID comes from sdkconfig, included automatically by build system
     msg.module_id = CONFIG_MODULE_ID;
     msg.timestamp = (uint32_t)(esp_timer_get_time() / 1000);
     

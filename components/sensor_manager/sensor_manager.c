@@ -57,7 +57,8 @@ static void sensor_monitor_task(void *arg)
                                  adc_value, detection_threshold);
                         
                         if (break_callback) {
-                            break_callback(CONFIG_MODULE_ID);
+                            // Pass sensor identifier (use module ID as sensor ID)
+                            break_callback(adc_chan);
                         }
                     } else {
                         // Beam restored

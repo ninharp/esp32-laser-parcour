@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
+#include "driver/gpio.h"
 
 #ifdef __cplusplus
 extern "C" {
