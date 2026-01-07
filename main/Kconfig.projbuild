@@ -129,10 +129,18 @@ menu "Laser Parcour Configuration"
 
     menu "Hardware Configuration"
 
+        config ENABLE_DISPLAY
+            bool "Enable OLED Display"
+            default y
+            depends on MODULE_ROLE_CONTROL
+            help
+                Enable OLED display support. Disable this if running headless
+                with web interface only.
+
         choice OLED_TYPE
             prompt "OLED Display Type"
             default OLED_SSD1306
-            depends on MODULE_ROLE_CONTROL
+            depends on MODULE_ROLE_CONTROL && ENABLE_DISPLAY
             help
                 Type of OLED display controller.
 
@@ -144,21 +152,23 @@ menu "Laser Parcour Configuration"
 
         config I2C_SDA_PIN
             int "I2C SDA Pin"
-            range 0 21
+            range -1 21
             default 8
-            depends on MODULE_ROLE_CONTROL
+            depends on MODULE_ROLE_CONTROL && ENABLE_DISPLAY
             help
                 GPIO pin for I2C data line (SDA).
+                Set to -1 to disable display.
                 Note: GPIO18-19 are used for USB on some boards.
                 Recommended: GPIO0-10, GPIO20-21.
 
         config I2C_SCL_PIN
             int "I2C SCL Pin"
-            range 0 21
+            range -1 21
             default 9
-            depends on MODULE_ROLE_CONTROL
+            depends on MODULE_ROLE_CONTROL && ENABLE_DISPLAY
             help
                 GPIO pin for I2C clock line (SCL).
+                Set to -1 to disable display.
                 Note: GPIO18-19 are used for USB on some boards.
                 Recommended: GPIO0-10, GPIO20-21.
 
@@ -166,49 +176,69 @@ menu "Laser Parcour Configuration"
             int "I2C Frequency (Hz)"
             range 100000 400000
             default 100000
-            depends on MODULE_ROLE_CONTROL
+            depends on MODULE_ROLE_CONTROL && ENABLE_DISPLAY
             help
                 I2C bus frequency in Hz (100kHz or 400kHz).
 
-        config BUZZER_PIN
-            int "Buzzer Pin"
-            range 0 21
-            default 5
+        config ENABLE_BUTTONS
+            bool "Enable Physical Buttons"
+            default y
             depends on MODULE_ROLE_CONTROL
             help
-                GPIO pin for buzzer/speaker output.
+                Enable physical button support. Disable this if controlling
+                only via web interface.
 
         config BUTTON1_PIN
             int "Button 1 Pin (Start/Stop)"
-            range 0 21
+            range -1 21
             default 2
-            depends on MODULE_ROLE_CONTROL
+            depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
                 GPIO pin for Button 1 (Start/Stop game).
+                Set to -1 to disable this button.
 
         config BUTTON2_PIN
             int "Button 2 Pin (Mode Select)"
-            range 0 21
+            range -1 21
             default 3
-            depends on MODULE_ROLE_CONTROL
+            depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
                 GPIO pin for Button 2 (Mode selection).
+                Set to -1 to disable this button.
 
         config BUTTON3_PIN
             int "Button 3 Pin (Reset)"
-            range 0 21
+            range -1 21
             default 4
-            depends on MODULE_ROLE_CONTROL
+            depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
                 GPIO pin for Button 3 (Reset score).
+                Set to -1 to disable this button.
 
         config BUTTON4_PIN
             int "Button 4 Pin (Confirm)"
-            range 0 21
+            range -1 21
             default 6
-            depends on MODULE_ROLE_CONTROL
+            depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
                 GPIO pin for Button 4 (Confirm selection).
+                Set to -1 to disable this button.
+
+        config ENABLE_BUZZER
+            bool "Enable Buzzer"
+            default y
+            depends on MODULE_ROLE_CONTROL
+            help
+                Enable buzzer/speaker for audio feedback.
+
+        config BUZZER_PIN
+            int "Buzzer Pin"
+            range -1 21
+            default 5
+            depends on MODULE_ROLE_CONTROL && ENABLE_BUZZER
+            help
+                GPIO pin for buzzer/speaker output.
+                Set to -1 to disable buzzer.
 
         config LASER_PIN
             int "Laser Control Pin"

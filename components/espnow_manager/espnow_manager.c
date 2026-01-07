@@ -26,8 +26,8 @@ static const uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 // Message receive callback
 static espnow_recv_callback_t recv_callback = NULL;
 
-// Message queue
-static QueueHandle_t espnow_queue = NULL;
+// Message queue (reserved for future use)
+static QueueHandle_t espnow_queue __attribute__((unused)) = NULL;
 
 /**
  * ESP-NOW send callback

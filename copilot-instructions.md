@@ -216,6 +216,181 @@ esp_err_t game_set_config(const game_config_t *config)
 
 ---
 
+#### `components/wifi_ap_manager/`
+**Zweck:** WiFi Access Point Management für Main Unit  
+**Hauptfunktionen:**
+```c
+esp_err_t wifi_ap_init(wifi_ap_config_t *config)
+uint8_t wifi_ap_get_connected_stations(void)
+esp_err_t wifi_ap_get_ip_info(esp_netif_ip_info_t *ip_info)
+```
+
+**Konfiguration:**
+```c
+typedef struct {
+    char ssid[32];           // WiFi SSID
+    char password[64];       // WiFi Passwort (8-64 Zeichen)
+    uint8_t channel;         // WiFi Kanal (1-13)
+    uint8_t max_connections; // Max. Verbindungen
+    bool hidden;             // Hidden SSID
+} wifi_ap_config_t;
+```
+
+**Verwendung:**
+- Erstellt WiFi-Netzwerk für Web-Interface
+- DHCP-Server auf 192.168.4.x Subnetz
+- Event-Handler für Station Connect/Disconnect
+- Typische IP: 192.168.4.1
+
+**Dependencies:** `esp_wifi`, `esp_event`, `esp_netif`
+
+**Konfigurationsoptionen (Kconfig):**
+- CONFIG_WIFI_SSID (default: "LaserParcour")
+- CONFIG_WIFI_PASSWORD
+- CONFIG_WIFI_CHANNEL (default: 6)
+- CONFIG_MAX_STA_CONN (default: 4)
+
+**Verwendet von:** Main Unit (CONTROL Module)
+
+---
+
+#### `components/button_handler/`
+**Zweck:** Physikalische Button-Eingabe mit Debouncing und Event-Erkennung  
+**Hauptfunktionen:**
+```c
+esp_err_t button_handler_init(button_config_t *buttons, uint8_t count, 
+                              button_event_callback_t callback)
+bool button_get_state(uint8_t button_id)
+```
+
+**Button-Konfiguration:**
+```c
+typedef struct {
+    int pin;                    // GPIO Pin (-1 zum Deaktivieren)
+    uint16_t debounce_time_ms;  // Entprellzeit (default: 50ms)
+    uint16_t long_press_time_ms; // Long-Press Schwelle (default: 1000ms)
+    bool pull_up;               // Interner Pull-Up
+    bool active_low;            // Button active-low (typisch bei Pull-Up)
+} button_config_t;
+```
+
+**Event-Typen:**
+- BUTTON_EVENT_PRESSED - Button gedrückt
+- BUTTON_EVENT_RELEASED - Button losgelassen
+- BUTTON_EVENT_CLICK - Einzelklick erkannt
+- BUTTON_EVENT_DOUBLE_CLICK - Doppelklick (innerhalb 300ms)
+- BUTTON_EVENT_LONG_PRESS - Long-Press (>1000ms)
+
+**Callback:**
+```c
+typedef void (*button_event_callback_t)(uint8_t button_id, button_event_t event);
+```
+
+**Implementation:**
+- Polling-Task mit 100Hz (10ms Intervall)
+- Konfigurierbares Debouncing
+- Doppelklick-Fenster: 300ms
+- Pin -1 Support: Buttons werden ignoriert
+
+**Dependencies:** `driver` (GPIO), `freertos`, `esp_timer`
+
+**Konfigurationsoptionen (Kconfig):**
+- CONFIG_BUTTON1_PIN bis CONFIG_BUTTON4_PIN
+- CONFIG_DEBOUNCE_TIME (default: 50ms)
+- CONFIG_ENABLE_BUTTONS (optional feature flag)
+
+**Verwendet von:** Main Unit (CONTROL Module)
+
+---
+
+#### `components/buzzer/`
+**Zweck:** PWM-basiertes Audio-Feedback mit LEDC-Peripheral  
+**Hauptfunktionen:**
+```c
+esp_err_t buzzer_init(int gpio_pin)
+void buzzer_play_tone(uint32_t frequency, uint32_t duration_ms)
+void buzzer_play_pattern(buzzer_pattern_t pattern)
+void buzzer_set_volume(uint8_t volume)  // 0-100%
+void buzzer_stop(void)
+```
+
+**Vordefinierte Patterns:**
+- BUZZER_PATTERN_BEEP - Kurzer Beep (200ms, 1000Hz)
+- BUZZER_PATTERN_SUCCESS - Erfolg (3 aufsteigende Noten)
+- BUZZER_PATTERN_ERROR - Fehler (2 tiefe Noten)
+- BUZZER_PATTERN_COUNTDOWN - Countdown-Beeps (3x 100ms)
+- BUZZER_PATTERN_GAME_START - Spielstart-Fanfare
+- BUZZER_PATTERN_GAME_END - Spielende-Sequenz
+
+**Musikalische Noten:**
+Definiert C4 (262Hz) bis C5 (523Hz) - chromatische Tonleiter
+
+**Implementation:**
+- LEDC Timer 1, Channel 0
+- 13-bit Auflösung, 5000Hz Basisfrequenz
+- Lautstärke via PWM Duty-Cycle
+- FreeRTOS Task für Pattern-Sequenzen
+
+**Dependencies:** `driver` (LEDC), `freertos`
+
+**Konfigurationsoptionen (Kconfig):**
+- CONFIG_BUZZER_PIN (-1 zum Deaktivieren)
+- CONFIG_ENABLE_BUZZER (optional feature flag)
+
+**Verwendet von:** Main Unit (CONTROL Module)
+
+---
+
+#### `components/web_server/`
+**Zweck:** HTTP-Server mit Web-Interface und REST-API für Spielsteuerung  
+**Hauptfunktionen:**
+```c
+esp_err_t web_server_init(httpd_handle_t *server_out, 
+                         game_control_callback_t callback)
+void web_server_update_status(const game_status_t *status)
+```
+
+**HTTP-Endpoints:**
+- GET / - Haupt-Webinterface (HTML-Seite)
+- GET /api/status - Aktueller Spielstatus (JSON)
+- POST /api/game/start - Spiel starten
+- POST /api/game/stop - Spiel stoppen
+- POST /api/game/pause - Spiel pausieren
+- POST /api/game/resume - Spiel fortsetzen
+
+**API Response Format:**
+```json
+{
+  "state": "IDLE",
+  "lives": 3,
+  "score": 0,
+  "time_remaining": 60,
+  "current_level": 1
+}
+```
+
+**Callback-Mechanismus:**
+```c
+typedef esp_err_t (*game_control_callback_t)(const char *command, const char *data);
+```
+
+**Implementation:**
+- Port 80 (Standard-HTTP)
+- Minimalistisches HTML/CSS/JavaScript UI
+- AJAX-Polling für Live-Updates
+- Status-Cache via web_server_update_status()
+- Callback ermöglicht Web-Befehle → Game Logic
+
+**Dependencies:** `esp_http_server`
+
+**Konfiguration:**
+- Server läuft auf WiFi AP IP (192.168.4.1)
+- Keine zusätzlichen Kconfig-Optionen nötig
+
+**Verwendet von:** Main Unit (CONTROL Module)
+
+---
+
 #### `components/espnow_manager/`
 **Zweck:** ESP-NOW Kommunikation zwischen Main Unit und Laser Units  
 **Hauptfunktionen:**

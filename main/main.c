@@ -29,6 +29,10 @@
 #include "espnow_manager.h"
 #include "laser_control.h"
 #include "sensor_manager.h"
+#include "wifi_ap_manager.h"
+#include "button_handler.h"
+#include "buzzer.h"
+#include "web_server.h"
 
 static const char *TAG = "LASER_PARCOUR";
 
@@ -97,6 +101,59 @@ static void print_system_info(void)
 
 #ifdef CONFIG_MODULE_ROLE_CONTROL
 /**
+ * Button event callback (Main Unit)
+ */
+static void button_event_callback(uint8_t button_id, button_event_t event)
+{
+    ESP_LOGI(TAG, "Button %d event: %d", button_id, event);
+    
+    if (event == BUTTON_EVENT_CLICK) {
+        buzzer_play_pattern(BUZZER_PATTERN_BEEP);
+        
+        switch (button_id) {
+            case 0:  // Button 1 - Start/Stop
+                ESP_LOGI(TAG, "Start/Stop button pressed");
+                // TODO: Toggle game start/stop
+                break;
+            case 1:  // Button 2 - Mode Select
+                ESP_LOGI(TAG, "Mode select button pressed");
+                // TODO: Cycle through game modes
+                break;
+            case 2:  // Button 3 - Reset
+                ESP_LOGI(TAG, "Reset button pressed");
+                // TODO: Reset game
+                break;
+            case 3:  // Button 4 - Confirm
+                ESP_LOGI(TAG, "Confirm button pressed");
+                // TODO: Confirm selection
+                break;
+        }
+    }
+}
+
+/**
+ * Web server game control callback (Main Unit)
+ */
+static esp_err_t game_control_callback(const char *command, const char *data)
+{
+    ESP_LOGI(TAG, "Game control from web: %s", command);
+    
+    if (strcmp(command, "start") == 0) {
+        buzzer_play_pattern(BUZZER_PATTERN_GAME_START);
+        return game_start(GAME_MODE_SINGLE_SPEEDRUN, "Web Player");
+    } else if (strcmp(command, "stop") == 0) {
+        buzzer_play_pattern(BUZZER_PATTERN_GAME_END);
+        return game_stop();
+    } else if (strcmp(command, "pause") == 0) {
+        return game_pause();
+    } else if (strcmp(command, "resume") == 0) {
+        return game_resume();
+    }
+    
+    return ESP_ERR_INVALID_ARG;
+}
+
+/**
  * ESP-NOW message received callback (Main Unit)
  */
 static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_message_t *message)
@@ -130,25 +187,69 @@ static void init_main_unit(void)
 {
     ESP_LOGI(TAG, "Initializing Main Unit...");
     
+#ifdef CONFIG_ENABLE_DISPLAY
     // Initialize OLED display
-    ESP_LOGI(TAG, "  Initializing OLED Display (I2C SDA:%d SCL:%d)", 
-             CONFIG_I2C_SDA_PIN, CONFIG_I2C_SCL_PIN);
-    ESP_ERROR_CHECK(display_manager_init(CONFIG_I2C_SDA_PIN, CONFIG_I2C_SCL_PIN, CONFIG_I2C_FREQUENCY));
-    display_set_screen(SCREEN_IDLE);
+    if (CONFIG_I2C_SDA_PIN != -1 && CONFIG_I2C_SCL_PIN != -1) {
+        ESP_LOGI(TAG, "  Initializing OLED Display (I2C SDA:%d SCL:%d)", 
+                 CONFIG_I2C_SDA_PIN, CONFIG_I2C_SCL_PIN);
+        ESP_ERROR_CHECK(display_manager_init(CONFIG_I2C_SDA_PIN, CONFIG_I2C_SCL_PIN, CONFIG_I2C_FREQUENCY));
+        display_set_screen(SCREEN_IDLE);
+    } else {
+        ESP_LOGI(TAG, "  Display disabled (pin = -1)");
+    }
+#else
+    ESP_LOGI(TAG, "  Display disabled in menuconfig");
+#endif
+
+#ifdef CONFIG_ENABLE_BUTTONS
+    // Initialize buttons
+    button_config_t buttons[4] = {
+        {.pin = CONFIG_BUTTON1_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true},
+        {.pin = CONFIG_BUTTON2_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true},
+        {.pin = CONFIG_BUTTON3_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true},
+        {.pin = CONFIG_BUTTON4_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true}
+    };
     
-    // Initialize buttons (TODO: Implement button handler component)
-    ESP_LOGI(TAG, "  [TODO] Initialize Buttons (GPIO %d, %d, %d, %d)",
-             CONFIG_BUTTON1_PIN, CONFIG_BUTTON2_PIN, CONFIG_BUTTON3_PIN, CONFIG_BUTTON4_PIN);
+    // Count enabled buttons
+    uint8_t num_buttons = 0;
+    for (int i = 0; i < 4; i++) {
+        if (buttons[i].pin != -1) num_buttons++;
+    }
     
-    // Initialize buzzer (TODO: Implement buzzer component)
-    ESP_LOGI(TAG, "  [TODO] Initialize Buzzer (GPIO %d)", CONFIG_BUZZER_PIN);
+    if (num_buttons > 0) {
+        ESP_LOGI(TAG, "  Initializing %d buttons", num_buttons);
+        ESP_ERROR_CHECK(button_handler_init(buttons, 4, button_event_callback));
+    } else {
+        ESP_LOGI(TAG, "  Buttons disabled (all pins = -1)");
+    }
+#else
+    ESP_LOGI(TAG, "  Buttons disabled in menuconfig");
+#endif
+
+#ifdef CONFIG_ENABLE_BUZZER
+    // Initialize buzzer
+    ESP_LOGI(TAG, "  Initializing Buzzer (GPIO %d)", CONFIG_BUZZER_PIN);
+    ESP_ERROR_CHECK(buzzer_init(CONFIG_BUZZER_PIN));
+    buzzer_set_volume(50); // 50% volume
+    buzzer_play_pattern(BUZZER_PATTERN_SUCCESS); // Startup sound
+#else
+    ESP_LOGI(TAG, "  Buzzer disabled in menuconfig");
+#endif
     
-    // Initialize WiFi AP (TODO: Move to dedicated component)
-    ESP_LOGI(TAG, "  [TODO] Initialize WiFi AP (SSID: %s, Channel: %d)",
+    // Initialize WiFi AP
+    ESP_LOGI(TAG, "  Initializing WiFi AP (SSID: %s, Channel: %d)",
              CONFIG_WIFI_SSID, CONFIG_WIFI_CHANNEL);
+    laser_ap_config_t wifi_config = {
+        .channel = CONFIG_WIFI_CHANNEL,
+        .max_connection = CONFIG_MAX_STA_CONN
+    };
+    strncpy(wifi_config.ssid, CONFIG_WIFI_SSID, sizeof(wifi_config.ssid) - 1);
+    strncpy(wifi_config.password, CONFIG_WIFI_PASSWORD, sizeof(wifi_config.password) - 1);
+    ESP_ERROR_CHECK(wifi_ap_init(&wifi_config));
     
-    // Initialize web server (TODO: Implement web server component)
-    ESP_LOGI(TAG, "  [TODO] Initialize Web Server (http://192.168.4.1)");
+    // Initialize web server
+    ESP_LOGI(TAG, "  Initializing Web Server (http://192.168.4.1)");
+    ESP_ERROR_CHECK(web_server_init(NULL, game_control_callback));
     
     // Initialize ESP-NOW
     ESP_LOGI(TAG, "  Initializing ESP-NOW (Channel: %d)", CONFIG_ESPNOW_CHANNEL);
