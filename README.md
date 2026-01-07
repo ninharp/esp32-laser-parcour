@@ -451,7 +451,7 @@ CONFIG_SENSOR_THRESHOLD=500
 
 ### LED Status Indicators
 
-**Control Module:**
+**Main Unit:**
 - No dedicated status LED (uses OLED display)
 
 **Laser Units:**
