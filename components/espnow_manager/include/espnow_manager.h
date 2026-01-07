@@ -34,7 +34,9 @@ typedef enum {
     MSG_LASER_ON = 0x09,            // Turn laser on
     MSG_LASER_OFF = 0x0A,           // Turn laser off
     MSG_SENSOR_CALIBRATE = 0x0B,    // Calibrate sensor
-    MSG_RESET = 0x0C                // Reset module
+    MSG_RESET = 0x0C,               // Reset module
+    MSG_CHANNEL_CHANGE = 0x0D,      // WiFi channel change notification
+    MSG_CHANNEL_ACK = 0x0E          // Channel change acknowledgement
 } espnow_msg_type_t;
 
 /**
@@ -142,6 +144,23 @@ esp_err_t espnow_get_peers(espnow_peer_info_t *peers, size_t max_peers, size_t *
  * @return ESP_OK on success, error code otherwise
  */
 esp_err_t espnow_get_local_mac(uint8_t *mac_addr);
+
+/**
+ * Change WiFi/ESP-NOW channel
+ * 
+ * @param new_channel New channel (1-13)
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t espnow_change_channel(uint8_t new_channel);
+
+/**
+ * Broadcast channel change to all peers and wait for acknowledgement
+ * 
+ * @param new_channel New channel to broadcast
+ * @param timeout_ms Timeout in milliseconds to wait for ACKs
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t espnow_broadcast_channel_change(uint8_t new_channel, uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }

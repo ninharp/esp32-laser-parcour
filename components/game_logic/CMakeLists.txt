@@ -1,5 +1,5 @@
 idf_component_register(
     SRCS "game_logic.c"
     INCLUDE_DIRS "include"
-    REQUIRES esp_event freertos esp_timer
+    REQUIRES esp_event freertos esp_timer espnow_manager
 )

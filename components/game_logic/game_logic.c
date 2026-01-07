@@ -8,6 +8,7 @@
  */
 
 #include "game_logic.h"
+#include "espnow_manager.h"
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_timer.h"
@@ -363,3 +364,111 @@ esp_err_t game_reset_stats(void)
     
     return ESP_OK;
 }
+
+// Laser unit tracking
+#define MAX_LASER_UNITS 10
+static laser_unit_info_t laser_units[MAX_LASER_UNITS] = {0};
+static size_t laser_unit_count = 0;
+
+/**
+ * Update or add laser unit to tracking list
+ * This should be called when receiving ESP-NOW messages from units
+ */
+static void update_laser_unit(uint8_t module_id, const uint8_t *mac_addr, int8_t rssi)
+{
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    
+    // Find existing unit or add new one
+    for (size_t i = 0; i < laser_unit_count; i++) {
+        if (laser_units[i].module_id == module_id) {
+            // Update existing
+            memcpy(laser_units[i].mac_addr, mac_addr, 6);
+            laser_units[i].last_seen = now;
+            laser_units[i].rssi = rssi;
+            laser_units[i].is_online = true;
+            return;
+        }
+    }
+    
+    // Add new unit if space available
+    if (laser_unit_count < MAX_LASER_UNITS) {
+        laser_units[laser_unit_count].module_id = module_id;
+        memcpy(laser_units[laser_unit_count].mac_addr, mac_addr, 6);
+        laser_units[laser_unit_count].last_seen = now;
+        laser_units[laser_unit_count].rssi = rssi;
+        laser_units[laser_unit_count].is_online = true;
+        laser_units[laser_unit_count].laser_on = false;
+        snprintf(laser_units[laser_unit_count].status, sizeof(laser_units[laser_unit_count].status), "Active");
+        laser_unit_count++;
+        ESP_LOGI(TAG, "New laser unit registered: ID %d", module_id);
+    }
+}
+
+/**
+ * Get list of all registered laser units
+ */
+esp_err_t game_get_laser_units(laser_unit_info_t *units, size_t max_units, size_t *unit_count)
+{
+    if (!units || !unit_count) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    
+    // Update online status based on last_seen (5 second timeout)
+    for (size_t i = 0; i < laser_unit_count; i++) {
+        if (now - laser_units[i].last_seen > 5000) {
+            laser_units[i].is_online = false;
+            snprintf(laser_units[i].status, sizeof(laser_units[i].status), "Offline");
+        }
+    }
+    
+    size_t copy_count = (laser_unit_count < max_units) ? laser_unit_count : max_units;
+    memcpy(units, laser_units, copy_count * sizeof(laser_unit_info_t));
+    *unit_count = copy_count;
+    
+    return ESP_OK;
+}
+
+/**
+ * Control laser unit
+ */
+esp_err_t game_control_laser(uint8_t module_id, bool laser_on, uint8_t intensity)
+{
+    ESP_LOGI(TAG, "Controlling laser unit %d: %s (intensity: %d)", 
+             module_id, laser_on ? "ON" : "OFF", intensity);
+    
+    // Find unit and update state
+    for (size_t i = 0; i < laser_unit_count; i++) {
+        if (laser_units[i].module_id == module_id) {
+            laser_units[i].laser_on = laser_on;
+            break;
+        }
+    }
+    
+    if (laser_on) {
+        uint8_t data[1] = {intensity};
+        return espnow_broadcast_message(MSG_LASER_ON, data, sizeof(data));
+    } else {
+        return espnow_broadcast_message(MSG_LASER_OFF, NULL, 0);
+    }
+}
+
+/**
+ * Reset laser unit
+ */
+esp_err_t game_reset_laser_unit(uint8_t module_id)
+{
+    ESP_LOGI(TAG, "Resetting laser unit %d", module_id);
+    
+    return espnow_broadcast_message(MSG_RESET, NULL, 0);
+}
+
+/**
+ * Public function to update laser unit tracking (call from ESP-NOW callback)
+ */
+void game_update_laser_unit(uint8_t module_id, const uint8_t *mac_addr, int8_t rssi)
+{
+    update_laser_unit(module_id, mac_addr, rssi);
+}
+

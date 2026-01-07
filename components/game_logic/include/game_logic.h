@@ -182,6 +182,56 @@ int32_t game_calculate_score(uint32_t elapsed_time, uint16_t beam_breaks);
  */
 esp_err_t game_reset_stats(void);
 
+/**
+ * Laser Unit information
+ */
+typedef struct {
+    uint8_t module_id;           // Module ID
+    uint8_t mac_addr[6];         // MAC address
+    bool is_online;              // Is unit responding
+    bool laser_on;               // Is laser currently on
+    uint32_t last_seen;          // Last heartbeat timestamp (ms)
+    int8_t rssi;                 // Signal strength
+    char status[32];             // Status text
+} laser_unit_info_t;
+
+/**
+ * Get list of all registered laser units
+ * 
+ * @param units Array to store unit information
+ * @param max_units Maximum number of units to retrieve
+ * @param unit_count Pointer to store actual number of units
+ * @return ESP_OK on success, ESP_FAIL on error
+ */
+esp_err_t game_get_laser_units(laser_unit_info_t *units, size_t max_units, size_t *unit_count);
+
+/**
+ * Control laser unit
+ * 
+ * @param module_id Module ID to control
+ * @param laser_on true to turn laser on, false to turn off
+ * @param intensity Laser intensity (0-100), only used if laser_on is true
+ * @return ESP_OK on success, ESP_FAIL on error
+ */
+esp_err_t game_control_laser(uint8_t module_id, bool laser_on, uint8_t intensity);
+
+/**
+ * Reset laser unit
+ * 
+ * @param module_id Module ID to reset
+ * @return ESP_OK on success, ESP_FAIL on error
+ */
+esp_err_t game_reset_laser_unit(uint8_t module_id);
+
+/**
+ * Update laser unit tracking (call from ESP-NOW message handler)
+ * 
+ * @param module_id Module ID
+ * @param mac_addr MAC address of the unit
+ * @param rssi Signal strength
+ */
+void game_update_laser_unit(uint8_t module_id, const uint8_t *mac_addr, int8_t rssi);
+
 #ifdef __cplusplus
 }
 #endif

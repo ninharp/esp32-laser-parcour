@@ -79,13 +79,12 @@ esp_err_t espnow_manager_init(uint8_t channel, espnow_recv_callback_t callback)
     // Store callback
     recv_callback = callback;
     
-    // Initialize WiFi in station mode (required for ESP-NOW)
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_ERROR_CHECK(esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE));
+    // WiFi should already be initialized by wifi_ap_manager
+    // Just ensure we're on the correct channel
+    esp_err_t ret = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to set WiFi channel: %s", esp_err_to_name(ret));
+    }
     
     // Initialize ESP-NOW
     ESP_ERROR_CHECK(esp_now_init());
@@ -249,3 +248,56 @@ esp_err_t espnow_get_local_mac(uint8_t *mac_addr)
     
     return esp_wifi_get_mac(WIFI_IF_STA, mac_addr);
 }
+
+/**
+ * Change WiFi/ESP-NOW channel
+ */
+esp_err_t espnow_change_channel(uint8_t new_channel)
+{
+    if (new_channel < 1 || new_channel > 13) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    ESP_LOGI(TAG, "Changing WiFi/ESP-NOW channel to %d", new_channel);
+    
+    esp_err_t ret = esp_wifi_set_channel(new_channel, WIFI_SECOND_CHAN_NONE);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to change channel: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    ESP_LOGI(TAG, "Channel changed successfully to %d", new_channel);
+    return ESP_OK;
+}
+
+/**
+ * Broadcast channel change to all peers and wait for acknowledgement
+ */
+esp_err_t espnow_broadcast_channel_change(uint8_t new_channel, uint32_t timeout_ms)
+{
+    if (new_channel < 1 || new_channel > 13) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    ESP_LOGI(TAG, "Broadcasting channel change to %d (timeout: %lu ms)", new_channel, timeout_ms);
+    
+    // Prepare channel change message
+    uint8_t data[1] = {new_channel};
+    
+    // Send broadcast 3 times for reliability
+    for (int i = 0; i < 3; i++) {
+        esp_err_t ret = espnow_broadcast_message(MSG_CHANNEL_CHANGE, data, sizeof(data));
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to broadcast channel change (attempt %d)", i + 1);
+        }
+        vTaskDelay(pdMS_TO_TICKS(100)); // Wait 100ms between broadcasts
+    }
+    
+    // Give peers time to process and switch
+    ESP_LOGI(TAG, "Waiting %lu ms for peers to acknowledge channel change...", timeout_ms);
+    vTaskDelay(pdMS_TO_TICKS(timeout_ms));
+    
+    ESP_LOGI(TAG, "Channel change broadcast complete");
+    return ESP_OK;
+}
+

@@ -38,29 +38,39 @@ typedef struct {
 typedef esp_err_t (*game_control_callback_t)(const char *command, const char *data);
 
 /**
+ * Game status structure
+ */
+typedef struct {
+    const char *state;
+    int lives;
+    int score;
+    int time_remaining;
+    int current_level;
+} game_status_t;
+
+/**
  * Initialize web server
  * 
- * @param config Server configuration (NULL for defaults)
+ * @param server_out Pointer to store server handle (can be NULL)
  * @param game_callback Game control callback
  * @return ESP_OK on success, error code otherwise
  */
-esp_err_t web_server_init(const web_server_config_t *config, 
+esp_err_t web_server_init(httpd_handle_t *server_out, 
                           game_control_callback_t game_callback);
 
 /**
- * Deinitialize web server
+ * Stop web server
  * 
  * @return ESP_OK on success, error code otherwise
  */
-esp_err_t web_server_deinit(void);
+esp_err_t web_server_stop(void);
 
 /**
  * Update game status (for live updates)
  * 
- * @param json_status JSON string with game status
- * @return ESP_OK on success, error code otherwise
+ * @param status Game status structure
  */
-esp_err_t web_server_update_status(const char *json_status);
+void web_server_update_status(const game_status_t *status);
 
 #ifdef __cplusplus
 }

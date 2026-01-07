@@ -99,6 +99,26 @@ static void print_system_info(void)
     ESP_LOGI(TAG, "=================================================");
 }
 
+/**
+ * Notify all ESP-NOW peers about channel change
+ * Called by wifi_ap_manager before connecting to STA
+ */
+esp_err_t notify_channel_change(uint8_t new_channel)
+{
+    ESP_LOGI(TAG, "Notifying all ESP-NOW peers about channel change to %d", new_channel);
+    
+    // Broadcast channel change via ESP-NOW
+    esp_err_t ret = espnow_broadcast_channel_change(new_channel, 2000); // 2 second timeout
+    
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Channel change notification sent successfully");
+    } else {
+        ESP_LOGW(TAG, "Failed to send channel change notification: %s", esp_err_to_name(ret));
+    }
+    
+    return ret;
+}
+
 #ifdef CONFIG_MODULE_ROLE_CONTROL
 /**
  * Button event callback (Main Unit)
@@ -162,6 +182,9 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
              sender_mac[0], sender_mac[1], sender_mac[2], 
              sender_mac[3], sender_mac[4], sender_mac[5]);
     
+    // Update laser unit tracking
+    game_update_laser_unit(message->module_id, sender_mac, -50); // RSSI not available in callback
+    
     switch (message->msg_type) {
         case MSG_BEAM_BROKEN:
             ESP_LOGW(TAG, "Beam broken on module %d!", message->module_id);
@@ -172,6 +195,9 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
             break;
         case MSG_PAIRING_REQUEST:
             ESP_LOGI(TAG, "Pairing request from module %d", message->module_id);
+            break;
+        case MSG_CHANNEL_ACK:
+            ESP_LOGD(TAG, "Channel change ACK from module %d", message->module_id);
             break;
         default:
             ESP_LOGW(TAG, "Unknown message type: 0x%02X", message->msg_type);
@@ -236,16 +262,26 @@ static void init_main_unit(void)
     ESP_LOGI(TAG, "  Buzzer disabled in menuconfig");
 #endif
     
-    // Initialize WiFi AP
-    ESP_LOGI(TAG, "  Initializing WiFi AP (SSID: %s, Channel: %d)",
-             CONFIG_WIFI_SSID, CONFIG_WIFI_CHANNEL);
-    laser_ap_config_t wifi_config = {
+    // Initialize WiFi with automatic fallback
+    // Try to connect to saved WiFi, if fails -> start AP mode
+    ESP_LOGI(TAG, "  Initializing WiFi with automatic fallback...");
+    laser_ap_config_t ap_config = {
         .channel = CONFIG_WIFI_CHANNEL,
         .max_connection = CONFIG_MAX_STA_CONN
     };
-    strncpy(wifi_config.ssid, CONFIG_WIFI_SSID, sizeof(wifi_config.ssid) - 1);
-    strncpy(wifi_config.password, CONFIG_WIFI_PASSWORD, sizeof(wifi_config.password) - 1);
-    ESP_ERROR_CHECK(wifi_ap_init(&wifi_config));
+    strncpy(ap_config.ssid, CONFIG_WIFI_SSID, sizeof(ap_config.ssid) - 1);
+    strncpy(ap_config.password, CONFIG_WIFI_PASSWORD, sizeof(ap_config.password) - 1);
+    
+    esp_err_t wifi_ret = wifi_connect_with_fallback(&ap_config, 10000);
+    if (wifi_ret == ESP_OK) {
+        ESP_LOGI(TAG, "  Connected to saved WiFi network");
+        esp_netif_ip_info_t ip_info;
+        if (wifi_get_sta_ip(&ip_info) == ESP_OK) {
+            ESP_LOGI(TAG, "  WiFi STA IP: " IPSTR, IP2STR(&ip_info.ip));
+        }
+    } else {
+        ESP_LOGI(TAG, "  Running in AP mode (Fallback): http://192.168.4.1");
+    }
     
     // Initialize web server
     ESP_LOGI(TAG, "  Initializing Web Server (http://192.168.4.1)");
@@ -369,6 +405,22 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             }
             gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);  // Status LED on when paired
             break;
+        case MSG_CHANNEL_CHANGE: {
+            uint8_t new_channel = message->data[0];
+            ESP_LOGI(TAG, "Channel change request to channel %d", new_channel);
+            
+            // Change channel
+            esp_err_t ret = espnow_change_channel(new_channel);
+            if (ret == ESP_OK) {
+                ESP_LOGI(TAG, "Channel changed successfully to %d", new_channel);
+                
+                // Send ACK back to main unit
+                espnow_broadcast_message(MSG_CHANNEL_ACK, NULL, 0);
+            } else {
+                ESP_LOGE(TAG, "Failed to change channel: %s", esp_err_to_name(ret));
+            }
+            break;
+        }
         default:
             ESP_LOGW(TAG, "Unknown message type: 0x%02X", message->msg_type);
             break;
