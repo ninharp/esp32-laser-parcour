@@ -160,17 +160,29 @@ static esp_err_t game_control_callback(const char *command, const char *data)
 {
     ESP_LOGI(TAG, "Game control from web: %s", command);
     
+    esp_err_t ret = ESP_ERR_INVALID_ARG;
+    
     if (strcmp(command, "start") == 0) {
         buzzer_play_pattern(BUZZER_PATTERN_GAME_START);
-        return game_start(GAME_MODE_SINGLE_SPEEDRUN, "Web Player");
+        ret = game_start(GAME_MODE_SINGLE_SPEEDRUN, "Web Player");
     } else if (strcmp(command, "stop") == 0) {
         buzzer_play_pattern(BUZZER_PATTERN_GAME_END);
-        return game_stop();
+        ret = game_stop();
     } else if (strcmp(command, "pause") == 0) {
-        return game_pause();
+        ret = game_pause();
     } else if (strcmp(command, "resume") == 0) {
-        return game_resume();
+        ret = game_resume();
     }
+    
+    // Update web interface with new game state
+    if (ret == ESP_OK) {
+        player_data_t player_data;
+        if (game_get_player_data(&player_data) == ESP_OK) {
+            // TODO: Update web status properly
+        }
+    }
+    
+    return ret;
     
     return ESP_ERR_INVALID_ARG;
 }
@@ -406,9 +418,15 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             laser_turn_on(100);  // Turn laser on at full intensity
             gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);
             gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 1);
+            // Start sensor monitoring
+            sensor_start_monitoring();
+            ESP_LOGI(TAG, "Sensor monitoring started");
             break;
         case MSG_GAME_STOP:
             ESP_LOGI(TAG, "Game stop command received");
+            // Stop sensor monitoring
+            sensor_stop_monitoring();
+            ESP_LOGI(TAG, "Sensor monitoring stopped");
             laser_turn_off();
             gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
             gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
@@ -435,13 +453,19 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             break;
         case MSG_RESET:
             ESP_LOGI(TAG, "Reset command received");
+            // Stop sensor monitoring
+            sensor_stop_monitoring();
             // Turn off laser and all LEDs
             laser_turn_off();
             gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
             gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
             gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
-            // Reset pairing status
+            // Reset pairing status and restart pairing timer
             is_paired = false;
+            if (pairing_timer) {
+                esp_timer_start_periodic(pairing_timer, 5000000); // 5 seconds
+                ESP_LOGI(TAG, "Pairing timer restarted");
+            }
             ESP_LOGI(TAG, "Module reset complete");
             break;
         case MSG_CHANNEL_CHANGE: {

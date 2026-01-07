@@ -11,6 +11,7 @@
 #include "wifi_ap_manager.h"
 #include "game_logic.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <string.h>
 #include "cJSON.h"
 
@@ -89,7 +90,7 @@ static const char index_html[] = "<!DOCTYPE html>\n"
 "}).catch(e=>console.error(e));}\n"
 "function control(cmd){\n"
 "fetch('/api/game/'+cmd,{method:'POST'}).then(r=>r.json()).then(d=>{\n"
-"alert(d.message||'OK');updateStatus();}).catch(e=>alert('Error: '+e));}\n"
+"updateStatus();}).catch(e=>console.error('Control error:',e));}\n"
 "function scanWiFi(){\n"
 "document.getElementById('wifi-list').innerHTML='<li>Scanning...</li>';\n"
 "fetch('/api/wifi/scan').then(r=>r.json()).then(d=>{\n"
@@ -162,12 +163,39 @@ static esp_err_t status_handler(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "application/json");
     
-    if (strlen(cached_status) > 0) {
-        httpd_resp_send(req, cached_status, strlen(cached_status));
-    } else {
-        httpd_resp_send(req, "{\"state\":\"IDLE\",\"lives\":3,\"score\":0,\"time_remaining\":0}", HTTPD_RESP_USE_STRLEN);
+    // Get current game state and player data
+    player_data_t player_data;
+    game_state_t state = game_get_state();
+    
+    const char *state_str = "IDLE";
+    switch (state) {
+        case GAME_STATE_IDLE: state_str = "IDLE"; break;
+        case GAME_STATE_READY: state_str = "READY"; break;
+        case GAME_STATE_COUNTDOWN: state_str = "COUNTDOWN"; break;
+        case GAME_STATE_RUNNING: state_str = "RUNNING"; break;
+        case GAME_STATE_PENALTY: state_str = "PENALTY"; break;
+        case GAME_STATE_PAUSED: state_str = "PAUSED"; break;
+        case GAME_STATE_COMPLETE: state_str = "COMPLETE"; break;
+        case GAME_STATE_ERROR: state_str = "ERROR"; break;
     }
     
+    if (game_get_player_data(&player_data) == ESP_OK) {
+        // Calculate time remaining
+        uint32_t elapsed = (player_data.end_time > 0) ? 
+            (player_data.end_time - player_data.start_time) : 
+            ((uint32_t)(esp_timer_get_time() / 1000) - player_data.start_time);
+        uint32_t time_remaining = (180000 > elapsed) ? (180000 - elapsed) / 1000 : 0;
+        
+        snprintf(cached_status, sizeof(cached_status),
+                 "{\"state\":\"%s\",\"lives\":3,\"score\":%ld,\"time_remaining\":%lu,\"current_level\":1,\"beam_breaks\":%d}",
+                 state_str, player_data.score, time_remaining, player_data.beam_breaks);
+    } else {
+        snprintf(cached_status, sizeof(cached_status),
+                 "{\"state\":\"%s\",\"lives\":3,\"score\":0,\"time_remaining\":0,\"current_level\":1,\"beam_breaks\":0}",
+                 state_str);
+    }
+    
+    httpd_resp_send(req, cached_status, strlen(cached_status));
     return ESP_OK;
 }
 

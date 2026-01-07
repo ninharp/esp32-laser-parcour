@@ -680,11 +680,44 @@ CONFIG_SENSOR_LED_RED_PIN=2
 ### Web Interface Unit Status
 
 **Problem:** Webinterface zeigt Units als "offline" obwohl verbunden
-**TODO:** 
-- [ ] Unit Status Tracking verbessern
-- [ ] Heartbeat Messages implementieren
-- [ ] Web API für Unit-Status erweitern
-- [ ] Message Box im Web-Interface entfernen (Status wird direkt aktualisiert)
+**Lösung:** 
+- Units werden bei jeder ESP-NOW Message via game_update_laser_unit() aktualisiert
+- `last_seen` Timestamp wird gesetzt und `is_online = true`
+- Status wird als "offline" markiert wenn keine Message seit 5 Sekunden
+- **Noch TODO:** Heartbeat Messages für persistente Online-Anzeige auch ohne Game-Activity
+
+### Web Interface Status Updates
+
+**Problem:** Game Status (IDLE/RUNNING/PAUSED) änderte sich nicht im Web Interface
+**Lösung:**
+- status_handler() ruft jetzt direkt game_get_state() und game_get_player_data() auf
+- Echte Spielzeit und Score werden live berechnet und angezeigt
+- Alert-Boxen bei Start/Stop entfernt (nur noch console.log)
+- Status wird alle 2 Sekunden automatisch aktualisiert
+
+### Sensor Monitoring on Game Start
+
+**Problem:** Laser Unit schaltet Laser ein bei MSG_GAME_START, aber ADC Sensor wird nicht gestartet
+**Lösung:** 
+- MSG_GAME_START Handler ruft sensor_start_monitoring() auf
+- MSG_GAME_STOP Handler ruft sensor_stop_monitoring() auf
+- Beam breaks werden nun korrekt erkannt während des Spiels
+
+### Pairing Timer Restart on Reset
+
+**Problem:** Nach Main Unit Neustart versucht Laser Unit kein erneutes Pairing
+**Lösung:**
+- MSG_RESET Handler setzt `is_paired = false`
+- MSG_RESET Handler startet pairing_timer neu mit esp_timer_start_periodic()
+- Laser Unit sendet wieder alle 5 Sekunden MSG_PAIRING_REQUEST
+- Automatisches Re-Pairing nach Main Unit Neustart funktioniert
+
+**Code-Änderungen (2025-01-07):**
+- `main/main.c`: Sensor Start/Stop in MSG_GAME_START/STOP Handlers
+- `main/main.c`: Pairing-Timer Neustart in MSG_RESET Handler
+- `web_server/web_server.c`: Echte Game-Daten in status_handler()
+- `web_server/web_server.c`: Alert-Boxen entfernt, nur console.log
+- `web_server/web_server.c`: esp_timer.h Include hinzugefügt
 
 ---
 
