@@ -1,86 +1,91 @@
-# ESP32 Laser Parcour
+# ESP32 Laser Obstacle Course Game System
 
-A laser-based timing and obstacle detection system using ESP32 microcontrollers with retroreflective architecture.
+A modular, ESP32-C3 based laser obstacle course game system featuring wireless control, real-time monitoring, and an interactive gaming experience. Perfect for events, arcades, or DIY gaming setups.
 
-## Architecture Overview
+## 🎯 Overview
 
-This system uses a **retroreflective architecture** where each detection unit contains both the laser transmitter and the optical sensor in a single device. The laser beam is directed toward a passive retroreflector film mounted on the opposite side, which reflects the light directly back to the sensor in the same unit.
+This project implements a distributed laser obstacle course system where players must navigate through laser beams without breaking them. The system consists of multiple ESP32-C3 modules working together:
 
-### How It Works
+- **Control Module**: Central game controller managing game state and coordination
+- **Laser Modules**: Emit laser beams across the course
+- **Sensor Modules**: Detect beam interruptions and player movements
+- **Display Module**: Shows game status, timer, and scores
 
-1. **Active Unit (ESP32 + Laser + Sensor)**: Each detection point consists of one ESP32-based unit that houses:
-   - A laser diode that emits a focused beam
-   - An optical sensor that detects the reflected laser light
-   - Control electronics and communication interfaces
+All modules communicate wirelessly using ESP-NOW protocol for low-latency, reliable communication.
 
-2. **Passive Retroreflector**: On the opposite side of the detection area:
-   - Retroreflective film or tape that reflects incoming light back to its source
-   - No active electronics or power required
-   - Simple installation and maintenance
+## ✨ Features
 
-3. **Detection Method**: 
-   - The laser continuously emits toward the retroreflector
-   - The reflected beam returns to the sensor in the same unit
-   - When an object (person, vehicle, etc.) breaks the beam, the sensor detects the interruption
-   - The ESP32 processes the interruption and triggers appropriate actions (timing, alarms, etc.)
+### Core Functionality
+- 🎮 **Multi-player support** - Track multiple players and their scores
+- ⏱️ **Real-time timing** - Precise time tracking for speedrun challenges
+- 🔴 **Beam break detection** - Instant detection when lasers are interrupted
+- 📊 **Live scoring system** - Dynamic scoring based on performance
+- 🎵 **Audio feedback** - Sound effects for events (hits, completion, etc.)
+- 💡 **Visual indicators** - LED feedback for game states
 
-### Advantages of Retroreflective Architecture
+### Technical Features
+- 🌐 **Wireless mesh network** - ESP-NOW based communication
+- 🔋 **Low power consumption** - Optimized for battery operation
+- 🔧 **Modular architecture** - Easy to add/remove modules
+- 📱 **Web interface** - Configure and monitor via built-in web server
+- 🔄 **OTA updates** - Update firmware wirelessly
+- 📈 **Performance metrics** - Real-time monitoring and statistics
 
-- **Simplified Installation**: Only one side requires power and data connectivity
-- **Cost Effective**: Passive retroreflectors are inexpensive and require no maintenance
-- **Easy Alignment**: Retroreflectors have a wide angle of acceptance
-- **Reliable Detection**: Less susceptible to environmental interference
-- **Scalable**: Easy to add multiple detection points without complex wiring
+## 🛠️ Hardware Requirements
 
-## Features
+### Control Module
+- **Microcontroller**: ESP32-C3-DevKitM-1 or compatible
+- **Display**: 128x64 OLED (SSD1306) via I2C
+- **Audio**: Passive buzzer or small speaker
+- **Input**: 2-4 push buttons for control
+- **Power**: USB-C or 5V power supply (500mA minimum)
 
-- ESP32-based wireless connectivity
-- Real-time beam interruption detection
-- Low power consumption
-- Easy integration with timing systems
-- Configurable detection sensitivity
-- Network-enabled for remote monitoring and control
+### Laser Module (per beam)
+- **Microcontroller**: ESP32-C3-DevKitM-1
+- **Laser**: 5V laser diode module (650nm red, <5mW Class 2)
+- **Driver**: Laser driver circuit with safety cutoff
+- **Power**: 5V power supply (200mA per laser)
 
-## Hardware Requirements
+### Sensor Module (per detection point)
+- **Microcontroller**: ESP32-C3-DevKitM-1
+- **Sensor**: Photoresistor or photodiode with amplifier
+- **Analog Circuit**: Op-amp based signal conditioning
+- **LEDs**: Status indicator LEDs (red/green)
+- **Power**: 5V power supply (150mA)
 
-- ESP32 development board
-- Laser diode module (typically 650nm red laser, 5mW)
-- Optical sensor (photodiode or phototransistor)
-- Retroreflective film or tape
-- Power supply (5V USB or battery)
-- Optional: Enclosure for weather protection
+### Optional Components
+- **Mounting Hardware**: Adjustable laser mounts, tripods
+- **Mirrors**: For creating complex beam patterns
+- **Battery Packs**: 18650 Li-ion with boost converter (for portable operation)
+- **Enclosures**: 3D printed or commercial project boxes
 
-## Applications
+### Recommended Tools
+- Soldering iron and supplies
+- Multimeter
+- 3D printer (for custom enclosures)
+- Basic hand tools
 
-- Sports timing systems (running tracks, ski courses, etc.)
-- Security perimeter detection
-- Obstacle course monitoring
-- Vehicle detection and counting
-- Industrial automation
+## 📋 Bill of Materials (BOM)
 
-## Installation
+| Component | Quantity | Estimated Cost (USD) |
+|-----------|----------|---------------------|
+| ESP32-C3-DevKitM-1 | 5-10 | $3-5 each |
+| 650nm Laser Module | 4-8 | $2-4 each |
+| OLED Display 128x64 | 1 | $5-8 |
+| Photoresistor/Photodiode | 4-8 | $1-2 each |
+| Passive Buzzer | 1 | $1-2 |
+| Push Buttons | 4 | $0.50 each |
+| Resistors/Capacitors | Various | $5-10 |
+| Power Supplies | 5-10 | $3-5 each |
+| **Total (basic 4-beam setup)** | - | **$80-150** |
 
-1. Mount the ESP32 unit with laser and sensor on one side of the detection area
-2. Install retroreflective film/tape on the opposite side, aligned with the laser beam
-3. Adjust the laser aim to ensure maximum reflection back to the sensor
-4. Configure the ESP32 software for your specific application
-5. Test the system by breaking the beam and verifying detection
+## 🚀 Setup Instructions
 
-## Safety
+### 1. Software Prerequisites
 
-- Use Class 2 lasers (< 1mW) for public applications to ensure eye safety
-- Clearly mark laser operation areas
-- Follow local regulations for laser device operation
-- Mount lasers at appropriate heights to avoid eye-level exposure
+```bash
+# Install PlatformIO Core
+pip install platformio
 
-## License
-
-[Specify your license here]
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit pull requests or open issues for improvements and bug fixes.
-
-## Author
-
-ninharp
+# Or use PlatformIO IDE (VSCode extension)
+# https://platformio.org/install/ide?install=vscode
