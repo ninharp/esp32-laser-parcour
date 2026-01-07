@@ -20,6 +20,7 @@
 #include "esp_netif.h"
 #include "nvs_flash.h"
 #include "driver/gpio.h"
+#include "esp_chip_info.h"
 
 static const char *TAG = "LASER_PARCOUR";
 
@@ -80,13 +81,13 @@ static void print_system_info(void)
     ESP_LOGI(TAG, "ESP-IDF:        %s", esp_get_idf_version());
     ESP_LOGI(TAG, "Chip:           ESP32-C3 (rev %d)", chip_info.revision);
     ESP_LOGI(TAG, "Cores:          %d", chip_info.cores);
-    ESP_LOGI(TAG, "Flash:          %dMB %s", 
-             spi_flash_get_chip_size() / (1024 * 1024),
+    ESP_LOGI(TAG, "Flash:          %s", 
              (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
-    ESP_LOGI(TAG, "Free Heap:      %ld bytes", esp_get_free_heap_size());
+    ESP_LOGI(TAG, "Free Heap:      %lu bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "=================================================");
 }
 
+#ifdef CONFIG_MODULE_ROLE_CONTROL
 /**
  * Main Unit Initialization
  * Initializes display, buttons, buzzer, WiFi AP, web server, and ESP-NOW
@@ -121,7 +122,9 @@ static void init_main_unit(void)
     
     ESP_LOGI(TAG, "Main Unit initialized - ready to coordinate game");
 }
+#endif
 
+#ifdef CONFIG_MODULE_ROLE_LASER
 /**
  * Laser Unit Initialization
  * Initializes laser control (PWM), sensor (ADC), LEDs, safety monitoring, and ESP-NOW
@@ -155,6 +158,7 @@ static void init_laser_unit(void)
     
     ESP_LOGI(TAG, "Laser Unit initialized - ready to emit beams and detect breaks");
 }
+#endif
 
 /**
  * Main application entry point

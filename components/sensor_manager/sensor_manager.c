@@ -98,7 +98,7 @@ esp_err_t sensor_manager_init(uint8_t adc_channel, uint16_t threshold, uint32_t 
     // Configure ADC channel
     adc_oneshot_chan_cfg_t config = {
         .bitwidth = ADC_BITWIDTH_12,
-        .atten = ADC_ATTEN_DB_11,
+        .atten = ADC_ATTEN_DB_12,
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, adc_chan, &config));
     
