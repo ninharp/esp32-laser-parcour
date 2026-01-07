@@ -1,7 +1,7 @@
 /**
  * ESP32 Laser Obstacle Course - Main Application
  * 
- * This is a modular system that can be configured as Control, Laser, or Sensor module
+ * This is a modular system that can be configured as Main Unit or Laser Unit
  * via menuconfig. Each module type has different initialization and behavior.
  * 
  * @author ninharp
@@ -25,14 +25,11 @@ static const char *TAG = "LASER_PARCOUR";
 
 // Module role from Kconfig
 #ifdef CONFIG_MODULE_ROLE_CONTROL
-    #define MODULE_ROLE "CONTROL"
+    #define MODULE_ROLE "MAIN_UNIT"
     #define IS_CONTROL_MODULE 1
 #elif defined(CONFIG_MODULE_ROLE_LASER)
-    #define MODULE_ROLE "LASER"
+    #define MODULE_ROLE "LASER_UNIT"
     #define IS_LASER_MODULE 1
-#elif defined(CONFIG_MODULE_ROLE_SENSOR)
-    #define MODULE_ROLE "SENSOR"
-    #define IS_SENSOR_MODULE 1
 #else
     #error "Module role not defined! Please run 'idf.py menuconfig' and select a module role."
 #endif
@@ -91,12 +88,12 @@ static void print_system_info(void)
 }
 
 /**
- * Control Module Initialization
+ * Main Unit Initialization
  * Initializes display, buttons, buzzer, WiFi AP, web server, and ESP-NOW
  */
 static void init_control_module(void)
 {
-    ESP_LOGI(TAG, "Initializing Control Module...");
+    ESP_LOGI(TAG, "Initializing Main Unit...");
     
     // TODO: Initialize I2C for OLED display
     ESP_LOGI(TAG, "  [TODO] Initialize OLED Display (I2C SDA:%d SCL:%d)", 
@@ -122,50 +119,30 @@ static void init_control_module(void)
     // TODO: Initialize game logic
     ESP_LOGI(TAG, "  [TODO] Initialize Game Logic");
     
-    ESP_LOGI(TAG, "Control Module initialized - ready to coordinate game");
+    ESP_LOGI(TAG, "Main Unit initialized - ready to coordinate game");
 }
 
 /**
- * Laser Module Initialization
- * Initializes laser control (PWM), safety monitoring, and ESP-NOW
+ * Laser Unit Initialization
+ * Initializes laser control (PWM), sensor (ADC), LEDs, safety monitoring, and ESP-NOW
  */
 static void init_laser_module(void)
 {
-    ESP_LOGI(TAG, "Initializing Laser Module...");
+    ESP_LOGI(TAG, "Initializing Laser Unit...");
     
     // TODO: Initialize laser PWM control
     ESP_LOGI(TAG, "  [TODO] Initialize Laser PWM (GPIO %d)", CONFIG_LASER_PIN);
     
-    // TODO: Initialize status LED
-    ESP_LOGI(TAG, "  [TODO] Initialize Status LED (GPIO %d)", CONFIG_LASER_STATUS_LED_PIN);
-    
-    // TODO: Initialize safety cutoff
-    ESP_LOGI(TAG, "  [TODO] Initialize Safety Cutoff (timeout: 10 min)");
-    
-    // TODO: Initialize ESP-NOW
-    ESP_LOGI(TAG, "  [TODO] Initialize ESP-NOW (Channel: %d)", CONFIG_ESPNOW_CHANNEL);
-    
-    // TODO: Start pairing mode
-    ESP_LOGI(TAG, "  [TODO] Start Pairing Mode - waiting for control module");
-    
-    ESP_LOGI(TAG, "Laser Module initialized - ready to emit beams");
-}
-
-/**
- * Sensor Module Initialization
- * Initializes ADC for photoresistor, LEDs, and ESP-NOW
- */
-static void init_sensor_module(void)
-{
-    ESP_LOGI(TAG, "Initializing Sensor Module...");
-    
-    // TODO: Initialize ADC for photoresistor
-    ESP_LOGI(TAG, "  [TODO] Initialize ADC (GPIO %d, Threshold: %d)", 
+    // TODO: Initialize ADC for photoresistor/sensor
+    ESP_LOGI(TAG, "  [TODO] Initialize ADC Sensor (GPIO %d, Threshold: %d)", 
              CONFIG_SENSOR_PIN, CONFIG_SENSOR_THRESHOLD);
     
     // TODO: Initialize status LEDs
-    ESP_LOGI(TAG, "  [TODO] Initialize Status LEDs (Green: GPIO %d, Red: GPIO %d)",
-             CONFIG_SENSOR_LED_GREEN_PIN, CONFIG_SENSOR_LED_RED_PIN);
+    ESP_LOGI(TAG, "  [TODO] Initialize Status LEDs (Status: GPIO %d, Green: GPIO %d, Red: GPIO %d)",
+             CONFIG_LASER_STATUS_LED_PIN, CONFIG_SENSOR_LED_GREEN_PIN, CONFIG_SENSOR_LED_RED_PIN);
+    
+    // TODO: Initialize safety cutoff
+    ESP_LOGI(TAG, "  [TODO] Initialize Safety Cutoff (timeout: 10 min)");
     
     // TODO: Initialize ESP-NOW
     ESP_LOGI(TAG, "  [TODO] Initialize ESP-NOW (Channel: %d)", CONFIG_ESPNOW_CHANNEL);
@@ -174,9 +151,9 @@ static void init_sensor_module(void)
     ESP_LOGI(TAG, "  [TODO] Start Beam Detection (debounce: %d ms)", CONFIG_DEBOUNCE_TIME);
     
     // TODO: Start pairing mode
-    ESP_LOGI(TAG, "  [TODO] Start Pairing Mode - waiting for control module");
+    ESP_LOGI(TAG, "  [TODO] Start Pairing Mode - waiting for main unit");
     
-    ESP_LOGI(TAG, "Sensor Module initialized - ready to detect beam breaks");
+    ESP_LOGI(TAG, "Laser Unit initialized - ready to emit beams and detect breaks");
 }
 
 /**
@@ -198,8 +175,6 @@ void app_main(void)
     init_control_module();
 #elif defined(IS_LASER_MODULE)
     init_laser_module();
-#elif defined(IS_SENSOR_MODULE)
-    init_sensor_module();
 #endif
     
     ESP_LOGI(TAG, "Initialization complete!");

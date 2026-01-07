@@ -6,10 +6,9 @@ A modular, ESP32-C3 based laser obstacle course game system featuring wireless c
 
 This project implements a distributed laser obstacle course system where players must navigate through laser beams without breaking them. The system consists of multiple ESP32-C3 modules working together:
 
-- **Control Module**: Central game controller managing game state and coordination
-- **Laser Modules**: Emit laser beams across the course
-- **Sensor Modules**: Detect beam interruptions and player movements
-- **Display Module**: Shows game status, timer, and scores
+- **Main Unit**: Central game controller managing game state and coordination
+- **Laser Units**: Combined units that emit laser beams and detect beam interruptions
+- **Display Module**: Shows game status, timer, and scores (integrated in Main Unit)
 
 All modules communicate wirelessly using ESP-NOW protocol for low-latency, reliable communication.
 
@@ -35,25 +34,21 @@ Built with **ESP-IDF 5.1+** for maximum performance and reliability.
 
 ## 🛠️ Hardware Requirements
 
-### Control Module
+### Main Unit
 - **Microcontroller**: ESP32-C3-DevKitM-1 or compatible
 - **Display**: 128x64 OLED (SSD1306) via I2C
 - **Audio**: Passive buzzer or small speaker
 - **Input**: 2-4 push buttons for control
 - **Power**: USB-C or 5V power supply (500mA minimum)
 
-### Laser Module (per beam)
+### Laser Unit (per beam)
 - **Microcontroller**: ESP32-C3-DevKitM-1
 - **Laser**: 5V laser diode module (650nm red, <5mW Class 2)
 - **Driver**: Laser driver circuit with safety cutoff
-- **Power**: 5V power supply (200mA per laser)
-
-### Sensor Module (per detection point)
-- **Microcontroller**: ESP32-C3-DevKitM-1
-- **Sensor**: Photoresistor or photodiode with amplifier
+- **Sensor**: Photoresistor or photodiode with amplifier (integrated in same unit)
 - **Analog Circuit**: Op-amp based signal conditioning
 - **LEDs**: Status indicator LEDs (red/green)
-- **Power**: 5V power supply (150mA)
+- **Power**: 5V power supply (250mA per unit)
 
 ### Optional Components
 - **Mounting Hardware**: Adjustable laser mounts, tripods
@@ -71,15 +66,15 @@ Built with **ESP-IDF 5.1+** for maximum performance and reliability.
 
 | Component | Quantity | Estimated Cost (USD) |
 |-----------|----------|---------------------|
-| ESP32-C3-DevKitM-1 | 5-10 | $3-5 each |
+| ESP32-C3-DevKitM-1 | 5 (1 Main + 4 Laser Units) | $3-5 each |
 | 650nm Laser Module | 4-8 | $2-4 each |
 | OLED Display 128x64 | 1 | $5-8 |
 | Photoresistor/Photodiode | 4-8 | $1-2 each |
 | Passive Buzzer | 1 | $1-2 |
 | Push Buttons | 4 | $0.50 each |
 | Resistors/Capacitors | Various | $5-10 |
-| Power Supplies | 5-10 | $3-5 each |
-| **Total (basic 4-beam setup)** | - | **$80-150** |
+| Power Supplies | 5 | $3-5 each |
+| **Total (basic 4-beam setup)** | - | **$70-130** |
 
 ## 🚀 Setup Instructions
 
@@ -125,7 +120,7 @@ idf.py menuconfig
 
 Navigate to **"Laser Parcour Configuration"** to set:
 
-- Module type (Control, Laser, or Sensor)
+- Module type (Main Unit or Laser Unit)
 - Module ID (unique identifier 1-255)
 - WiFi credentials (for web interface)
 - Game parameters (timing, scoring)
@@ -160,7 +155,7 @@ Replace `/dev/ttyUSB0` with your serial port:
 
 ### 6. Hardware Wiring
 
-#### Control Module
+#### Main Unit
 
 | ESP32-C3 Pin | Component | Description |
 |--------------|-----------|-------------|
@@ -174,22 +169,14 @@ Replace `/dev/ttyUSB0` with your serial port:
 | 5V | VCC | Power Supply |
 | GND | GND | Ground |
 
-#### Laser Module
+#### Laser Unit (Combined Laser + Sensor)
 
 | ESP32-C3 Pin | Component | Description |
 |--------------|-----------|-------------|
 | GPIO10 | Laser Module | Laser Control (PWM) |
-| GPIO2 | Status LED | Red LED Indicator |
-| 5V | VCC | Power Supply |
-| GND | GND | Ground |
-
-#### Sensor Module
-
-| ESP32-C3 Pin | Component | Description |
-|--------------|-----------|-------------|
 | GPIO0 | Photoresistor | Analog Input (ADC1_CH0) |
-| GPIO1 | LED Green | Ready Indicator |
-| GPIO2 | LED Red | Beam Broken Indicator |
+| GPIO1 | LED Green | Beam Detected Indicator |
+| GPIO2 | LED Red | Beam Broken / Status LED |
 | 5V | VCC | Power Supply |
 | GND | GND | Ground |
 
@@ -199,39 +186,31 @@ Replace `/dev/ttyUSB0` with your serial port:
 
 Each ESP32 module needs to be flashed with the appropriate role configuration:
 
-**For Control Module:**
+**For Main Unit:**
 ```bash
 idf.py menuconfig
 # Navigate to: Laser Parcour Configuration → Module Settings
-# Set Module Role: Control Module
+# Set Module Role: Main Unit
 # Set Module ID: 1
 idf.py build flash
 ```
 
-**For Laser Modules:**
+**For Laser Units:**
 ```bash
 idf.py menuconfig
-# Set Module Role: Laser Module
-# Set Module ID: 2, 3, 4... (unique for each laser)
-idf.py build flash
-```
-
-**For Sensor Modules:**
-```bash
-idf.py menuconfig
-# Set Module Role: Sensor Module  
-# Set Module ID: 10, 11, 12... (unique for each sensor)
+# Set Module Role: Laser Unit
+# Set Module ID: 2, 3, 4... (unique for each laser unit)
 idf.py build flash
 ```
 
 ### 8. Initial System Setup
 
-1. **Power on the Control Module** - It will create WiFi AP: `ESP32-LaserParcour`
+1. **Power on the Main Unit** - It will create WiFi AP: `ESP32-LaserParcour`
 2. **Connect to the AP** - Password: `lasergame` (configurable in menuconfig)
 3. **Access Web Interface** - Navigate to http://192.168.4.1
-4. **Power on Laser and Sensor modules** - They will auto-pair via ESP-NOW
+4. **Power on Laser Units** - They will auto-pair via ESP-NOW
 5. **Verify connectivity** - Check web interface for connected modules
-6. **Align hardware** - Position lasers and sensors, test beam detection
+6. **Align hardware** - Position laser units, test beam detection
 
 ## 🏗️ Architecture Overview
 
@@ -239,7 +218,7 @@ idf.py build flash
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Control Module                        │
+│                      Main Unit                          │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
 │  │ Game     │  │ ESP-NOW  │  │ Web      │             │
 │  │ Logic    │←→│ Manager  │  │ Server   │             │
@@ -250,19 +229,19 @@ idf.py build flash
 │  └──────────┘  └──────────┘  └──────────┘             │
 └─────────────────────────────────────────────────────────┘
                           ↓ ESP-NOW
-        ┌─────────────────┴─────────────────┐
-        ↓                                    ↓
-┌───────────────┐                   ┌───────────────┐
-│ Laser Modules │                   │Sensor Modules │
-│  ┌─────────┐  │                   │  ┌─────────┐  │
-│  │ Laser   │  │                   │  │ Photo   │  │
-│  │ Control │  │                   │  │ Detector│  │
-│  └─────────┘  │                   │  └─────────┘  │
-│  ┌─────────┐  │                   │  ┌─────────┐  │
-│  │ Safety  │  │                   │  │ Signal  │  │
-│  │ Monitor │  │                   │  │ Process │  │
-│  └─────────┘  │                   │  └─────────┘  │
-└───────────────┘                   └───────────────┘
+                    ┌─────┴─────┐
+                    ↓           ↓
+            ┌───────────────────────────┐
+            │    Laser Units (1-N)      │
+            │  ┌─────────┐  ┌─────────┐ │
+            │  │ Laser   │  │ Photo   │ │
+            │  │ Control │  │ Detector│ │
+            │  └─────────┘  └─────────┘ │
+            │  ┌─────────┐  ┌─────────┐ │
+            │  │ Safety  │  │ Signal  │ │
+            │  │ Monitor │  │ Process │ │
+            │  └─────────┘  └─────────┘ │
+            └───────────────────────────┘
 ```
 
 ### Communication Protocol
@@ -363,12 +342,12 @@ idf.py menuconfig
 Key configuration options under **"Laser Parcour Configuration"**:
 
 #### Module Settings
-- **Module Role**: Control / Laser / Sensor
+- **Module Role**: Main Unit / Laser Unit
 - **Module ID**: 1-255 (must be unique)
 - **Device Name**: Custom name for identification
 
 #### Network Settings
-- **WiFi SSID**: Access point name (Control module only)
+- **WiFi SSID**: Access point name (Main Unit only)
 - **WiFi Password**: AP password (minimum 8 characters)
 - **ESP-NOW Channel**: 1-13 (all modules must match)
 - **Max Paired Devices**: Maximum connected modules (default: 20)
@@ -473,7 +452,7 @@ CONFIG_SENSOR_THRESHOLD=500
 **Control Module:**
 - No dedicated status LED (uses OLED display)
 
-**Laser Modules:**
+**Laser Units:**
 
 | LED State | Meaning |
 |-----------|---------|
@@ -482,18 +461,11 @@ CONFIG_SENSOR_THRESHOLD=500
 | 🟡 Blinking Yellow | Active game in progress |
 | 🔵 Fast Blink Blue | Receiving configuration |
 
-**Sensor Modules:**
-
-| LED State | Meaning |
-|-----------|---------|
-| 🟢 Green Solid | Beam detected (normal) |
-| 🔴 Red Solid | Beam broken (triggered) |
-| 🟡 Yellow Blink | Pairing mode |
-| ⚪ Both Off | Not connected / Error |
+The green LED on the Laser Unit also indicates when the beam is detected (normal operation), while the red LED indicates when the beam is broken (triggered).
 
 ## 📡 Web Interface
 
-Access the web interface by connecting to the Control Module's WiFi network and navigating to `http://192.168.4.1`.
+Access the web interface by connecting to the Main Unit's WiFi network and navigating to `http://192.168.4.1`.
 
 ### Features
 
@@ -534,11 +506,11 @@ Access the web interface by connecting to the Control Module's WiFi network and 
 
 ### Module Not Pairing
 
-**Problem**: Laser or sensor module won't connect to control module
+**Problem**: Laser unit won't connect to main unit
 
 **Solutions**:
 - Verify all modules are on the same ESP-NOW channel (check menuconfig)
-- Check that control module WiFi AP is active
+- Check that main unit WiFi AP is active
 - Ensure modules are within ESP-NOW range (< 200m outdoor, < 100m indoor)
 - Reset both devices (long press Button 4)
 - Check serial monitor for pairing errors: `idf.py monitor`
@@ -575,9 +547,9 @@ Access the web interface by connecting to the Control Module's WiFi network and 
 **Problem**: Can't connect to web interface
 
 **Solutions**:
-- Verify AP mode is enabled in menuconfig (Control module only)
+- Verify AP mode is enabled in menuconfig (Main Unit only)
 - Check serial monitor for WiFi initialization logs
-- Restart the control module (power cycle)
+- Restart the main unit (power cycle)
 - Manually connect to WiFi SSID from menuconfig
 - Verify WiFi channel is not congested (try different channel)
 - Check if another device is using IP 192.168.4.1
@@ -630,7 +602,7 @@ idf.py build
 - This is a safety feature - check why it's triggering
 - Verify laser current isn't exceeding limits
 - Check for overheating (add heatsink if needed)
-- Ensure proper ventilation around laser module
+- Ensure proper ventilation around laser unit
 - Verify power supply can handle current spikes
 - Check safety circuit connections and thresholds
 - Review system logs for safety event details
@@ -658,6 +630,7 @@ idf.py build
 - **Add fuses** on all power supply lines (1A fast-blow recommended)
 - **Use proper wire gauges** - minimum 22 AWG for power, 24 AWG for signals
 - **Implement reverse polarity protection** on all power inputs
+- **Ground all metal enclosures** properly to prevent static discharge
 
 **Physical Safety:**
 
@@ -668,6 +641,7 @@ idf.py build
 - **Supervise all gameplay sessions** - do not leave system unattended when active
 - **Create clear entry/exit paths** that don't cross active beams
 - **Implement motion sensors** to detect people outside play area
+- **Secure all cables** to prevent tripping hazards
 
 **Software Safety:**
 
@@ -787,7 +761,7 @@ SOFTWARE.
 - [ ] Integration with gaming platforms
 
 ### Hardware Roadmap
-- [ ] Custom PCB designs for each module type
+- [ ] Custom PCB designs for Main Unit and Laser Units
 - [ ] 3D printable enclosures and mounts
 - [ ] Integrated battery packs with charging
 - [ ] Weatherproof outdoor versions
