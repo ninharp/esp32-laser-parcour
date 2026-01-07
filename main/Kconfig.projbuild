@@ -1,0 +1,269 @@
+menu "Laser Parcour Configuration"
+
+    choice MODULE_ROLE
+        prompt "Module Role"
+        default MODULE_ROLE_CONTROL
+        help
+            Select the role of this module in the laser parcour system.
+
+        config MODULE_ROLE_CONTROL
+            bool "Control Module"
+            help
+                Central game controller managing game state and coordination.
+                Runs web server and OLED display.
+
+        config MODULE_ROLE_LASER
+            bool "Laser Module"
+            help
+                Laser emitter module that controls laser diode.
+
+        config MODULE_ROLE_SENSOR
+            bool "Sensor Module"
+            help
+                Sensor module that detects laser beam interruptions.
+    endchoice
+
+    config MODULE_ID
+        int "Module ID"
+        range 1 255
+        default 1
+        help
+            Unique identifier for this module (1-255).
+            Control module typically uses ID 1.
+            Laser modules use IDs 2-9.
+            Sensor modules use IDs 10-19.
+
+    config DEVICE_NAME
+        string "Device Name"
+        default "ESP32-LaserModule"
+        help
+            Custom name for this device (shown in web interface).
+
+    menu "Network Settings"
+
+        config WIFI_SSID
+            string "WiFi SSID"
+            default "ESP32-LaserParcour"
+            help
+                SSID for WiFi Access Point (Control module only).
+
+        config WIFI_PASSWORD
+            string "WiFi Password"
+            default "lasergame"
+            help
+                Password for WiFi Access Point (minimum 8 characters).
+
+        config WIFI_CHANNEL
+            int "WiFi Channel"
+            range 1 13
+            default 1
+            help
+                WiFi channel for both AP and ESP-NOW (must match on all modules).
+
+        config MAX_STA_CONN
+            int "Maximum Simultaneous Connections"
+            range 1 4
+            default 4
+            help
+                Maximum number of stations that can connect to AP.
+
+        config ESPNOW_CHANNEL
+            int "ESP-NOW Channel"
+            range 1 13
+            default 1
+            help
+                Channel for ESP-NOW communication (must match WiFi channel).
+
+        config MAX_ESPNOW_PEERS
+            int "Maximum ESP-NOW Peers"
+            range 1 20
+            default 20
+            help
+                Maximum number of ESP-NOW peers (connected modules).
+
+    endmenu
+
+    menu "Game Parameters"
+
+        config GAME_DURATION
+            int "Default Game Duration (seconds)"
+            range 30 600
+            default 180
+            help
+                Default game duration in seconds (3 minutes = 180).
+
+        config PENALTY_TIME
+            int "Beam Break Penalty (seconds)"
+            range 0 30
+            default 5
+            help
+                Time penalty in seconds for each beam break.
+
+        config COUNTDOWN_DURATION
+            int "Pre-Game Countdown (seconds)"
+            range 3 10
+            default 5
+            help
+                Countdown duration before game starts.
+
+        config BASE_SCORE
+            int "Base Score"
+            range 0 10000
+            default 1000
+            help
+                Starting score for each game.
+
+        config TIME_BONUS_MULTIPLIER
+            int "Time Bonus Multiplier"
+            range 0 100
+            default 10
+            help
+                Points awarded per second of time remaining.
+
+        config PENALTY_POINTS
+            int "Penalty Points (negative)"
+            range -1000 0
+            default -50
+            help
+                Points deducted per beam break (use negative number).
+
+    endmenu
+
+    menu "Hardware Configuration"
+
+        choice OLED_TYPE
+            prompt "OLED Display Type"
+            default OLED_SSD1306
+            depends on MODULE_ROLE_CONTROL
+            help
+                Type of OLED display controller.
+
+            config OLED_SSD1306
+                bool "SSD1306"
+            config OLED_SH1106
+                bool "SH1106"
+        endchoice
+
+        config I2C_SDA_PIN
+            int "I2C SDA Pin"
+            range 0 21
+            default 8
+            depends on MODULE_ROLE_CONTROL
+            help
+                GPIO pin for I2C data line (SDA).
+
+        config I2C_SCL_PIN
+            int "I2C SCL Pin"
+            range 0 21
+            default 9
+            depends on MODULE_ROLE_CONTROL
+            help
+                GPIO pin for I2C clock line (SCL).
+
+        config I2C_FREQUENCY
+            int "I2C Frequency (Hz)"
+            range 100000 400000
+            default 100000
+            depends on MODULE_ROLE_CONTROL
+            help
+                I2C bus frequency in Hz (100kHz or 400kHz).
+
+        config BUZZER_PIN
+            int "Buzzer Pin"
+            range 0 21
+            default 5
+            depends on MODULE_ROLE_CONTROL
+            help
+                GPIO pin for buzzer/speaker output.
+
+        config BUTTON1_PIN
+            int "Button 1 Pin (Start/Stop)"
+            range 0 21
+            default 2
+            depends on MODULE_ROLE_CONTROL
+            help
+                GPIO pin for Button 1 (Start/Stop game).
+
+        config BUTTON2_PIN
+            int "Button 2 Pin (Mode Select)"
+            range 0 21
+            default 3
+            depends on MODULE_ROLE_CONTROL
+            help
+                GPIO pin for Button 2 (Mode selection).
+
+        config BUTTON3_PIN
+            int "Button 3 Pin (Reset)"
+            range 0 21
+            default 4
+            depends on MODULE_ROLE_CONTROL
+            help
+                GPIO pin for Button 3 (Reset score).
+
+        config BUTTON4_PIN
+            int "Button 4 Pin (Confirm)"
+            range 0 21
+            default 6
+            depends on MODULE_ROLE_CONTROL
+            help
+                GPIO pin for Button 4 (Confirm selection).
+
+        config LASER_PIN
+            int "Laser Control Pin"
+            range 0 21
+            default 10
+            depends on MODULE_ROLE_LASER
+            help
+                GPIO pin for laser diode control (PWM capable).
+
+        config LASER_STATUS_LED_PIN
+            int "Laser Status LED Pin"
+            range 0 21
+            default 2
+            depends on MODULE_ROLE_LASER
+            help
+                GPIO pin for status LED on laser module.
+
+        config SENSOR_PIN
+            int "Photoresistor ADC Pin"
+            range 0 4
+            default 0
+            depends on MODULE_ROLE_SENSOR
+            help
+                ADC channel for photoresistor (GPIO0-4 = ADC1_CH0-4).
+
+        config SENSOR_LED_GREEN_PIN
+            int "Sensor Green LED Pin"
+            range 0 21
+            default 1
+            depends on MODULE_ROLE_SENSOR
+            help
+                GPIO pin for green status LED (beam detected).
+
+        config SENSOR_LED_RED_PIN
+            int "Sensor Red LED Pin"
+            range 0 21
+            default 2
+            depends on MODULE_ROLE_SENSOR
+            help
+                GPIO pin for red status LED (beam broken).
+
+        config SENSOR_THRESHOLD
+            int "Beam Detection Threshold"
+            range 0 4095
+            default 500
+            depends on MODULE_ROLE_SENSOR
+            help
+                ADC threshold for detecting beam break (0-4095, 12-bit ADC).
+                Lower values = more sensitive. Adjust based on ambient light.
+
+        config DEBOUNCE_TIME
+            int "Debounce Time (ms)"
+            range 10 1000
+            default 100
+            help
+                Debounce delay in milliseconds for buttons and sensors.
+
+    endmenu
+
+endmenu
