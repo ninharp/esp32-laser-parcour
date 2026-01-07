@@ -21,6 +21,14 @@
 #include "nvs_flash.h"
 #include "driver/gpio.h"
 #include "esp_chip_info.h"
+#include "esp_timer.h"
+
+// Component includes
+#include "display_manager.h"
+#include "game_logic.h"
+#include "espnow_manager.h"
+#include "laser_control.h"
+#include "sensor_manager.h"
 
 static const char *TAG = "LASER_PARCOUR";
 
@@ -89,6 +97,32 @@ static void print_system_info(void)
 
 #ifdef CONFIG_MODULE_ROLE_CONTROL
 /**
+ * ESP-NOW message received callback (Main Unit)
+ */
+static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_message_t *message)
+{
+    ESP_LOGI(TAG, "ESP-NOW message received from %02X:%02X:%02X:%02X:%02X:%02X",
+             sender_mac[0], sender_mac[1], sender_mac[2], 
+             sender_mac[3], sender_mac[4], sender_mac[5]);
+    
+    switch (message->msg_type) {
+        case MSG_BEAM_BROKEN:
+            ESP_LOGW(TAG, "Beam broken on module %d!", message->module_id);
+            game_beam_broken(message->module_id);
+            break;
+        case MSG_STATUS_UPDATE:
+            ESP_LOGD(TAG, "Status update from module %d", message->module_id);
+            break;
+        case MSG_PAIRING_REQUEST:
+            ESP_LOGI(TAG, "Pairing request from module %d", message->module_id);
+            break;
+        default:
+            ESP_LOGW(TAG, "Unknown message type: 0x%02X", message->msg_type);
+            break;
+    }
+}
+
+/**
  * Main Unit Initialization
  * Initializes display, buttons, buzzer, WiFi AP, web server, and ESP-NOW
  */
@@ -96,35 +130,150 @@ static void init_main_unit(void)
 {
     ESP_LOGI(TAG, "Initializing Main Unit...");
     
-    // TODO: Initialize I2C for OLED display
-    ESP_LOGI(TAG, "  [TODO] Initialize OLED Display (I2C SDA:%d SCL:%d)", 
+    // Initialize OLED display
+    ESP_LOGI(TAG, "  Initializing OLED Display (I2C SDA:%d SCL:%d)", 
              CONFIG_I2C_SDA_PIN, CONFIG_I2C_SCL_PIN);
+    ESP_ERROR_CHECK(display_manager_init(CONFIG_I2C_SDA_PIN, CONFIG_I2C_SCL_PIN, CONFIG_I2C_FREQUENCY));
+    display_set_screen(SCREEN_IDLE);
     
-    // TODO: Initialize buttons
+    // Initialize buttons (TODO: Implement button handler component)
     ESP_LOGI(TAG, "  [TODO] Initialize Buttons (GPIO %d, %d, %d, %d)",
              CONFIG_BUTTON1_PIN, CONFIG_BUTTON2_PIN, CONFIG_BUTTON3_PIN, CONFIG_BUTTON4_PIN);
     
-    // TODO: Initialize buzzer
+    // Initialize buzzer (TODO: Implement buzzer component)
     ESP_LOGI(TAG, "  [TODO] Initialize Buzzer (GPIO %d)", CONFIG_BUZZER_PIN);
     
-    // TODO: Initialize WiFi AP
+    // Initialize WiFi AP (TODO: Move to dedicated component)
     ESP_LOGI(TAG, "  [TODO] Initialize WiFi AP (SSID: %s, Channel: %d)",
              CONFIG_WIFI_SSID, CONFIG_WIFI_CHANNEL);
     
-    // TODO: Initialize web server
+    // Initialize web server (TODO: Implement web server component)
     ESP_LOGI(TAG, "  [TODO] Initialize Web Server (http://192.168.4.1)");
     
-    // TODO: Initialize ESP-NOW
-    ESP_LOGI(TAG, "  [TODO] Initialize ESP-NOW (Channel: %d)", CONFIG_ESPNOW_CHANNEL);
+    // Initialize ESP-NOW
+    ESP_LOGI(TAG, "  Initializing ESP-NOW (Channel: %d)", CONFIG_ESPNOW_CHANNEL);
+    ESP_ERROR_CHECK(espnow_manager_init(CONFIG_ESPNOW_CHANNEL, espnow_recv_callback_main));
     
-    // TODO: Initialize game logic
-    ESP_LOGI(TAG, "  [TODO] Initialize Game Logic");
+    // Initialize game logic
+    ESP_LOGI(TAG, "  Initializing Game Logic");
+    ESP_ERROR_CHECK(game_logic_init());
     
     ESP_LOGI(TAG, "Main Unit initialized - ready to coordinate game");
 }
 #endif
 
 #ifdef CONFIG_MODULE_ROLE_LASER
+// Pairing state
+static bool is_paired = false;
+static esp_timer_handle_t pairing_timer = NULL;
+
+/**
+ * Pairing request timer callback
+ */
+static void pairing_timer_callback(void *arg)
+{
+    if (!is_paired) {
+        ESP_LOGI(TAG, "Sending pairing request (not yet paired)...");
+        espnow_broadcast_message(MSG_PAIRING_REQUEST, NULL, 0);
+    }
+}
+
+/**
+ * Initialize status LEDs
+ */
+static void init_status_leds(void)
+{
+    gpio_config_t io_conf = {
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    
+    // Configure laser status LED
+    io_conf.pin_bit_mask = (1ULL << CONFIG_LASER_STATUS_LED_PIN);
+    gpio_config(&io_conf);
+    gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
+    
+    // Configure sensor green LED
+    io_conf.pin_bit_mask = (1ULL << CONFIG_SENSOR_LED_GREEN_PIN);
+    gpio_config(&io_conf);
+    gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
+    
+    // Configure sensor red LED
+    io_conf.pin_bit_mask = (1ULL << CONFIG_SENSOR_LED_RED_PIN);
+    gpio_config(&io_conf);
+    gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
+    
+    ESP_LOGI(TAG, "Status LEDs initialized (Status:%d, Green:%d, Red:%d)",
+             CONFIG_LASER_STATUS_LED_PIN, CONFIG_SENSOR_LED_GREEN_PIN, CONFIG_SENSOR_LED_RED_PIN);
+}
+
+/**
+ * Beam break callback (Laser Unit)
+ */
+static void beam_break_callback(uint8_t sensor_id)
+{
+    ESP_LOGW(TAG, "Beam broken detected on sensor %d!", sensor_id);
+    
+    // Turn on red LED, turn off green LED
+    gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 1);
+    gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
+    
+    // Broadcast beam break to main unit
+    espnow_broadcast_message(MSG_BEAM_BROKEN, &sensor_id, sizeof(sensor_id));
+    
+    // Restore green LED after short delay (handled by sensor manager debounce)
+}
+
+/**
+ * ESP-NOW message received callback (Laser Unit)
+ */
+static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_message_t *message)
+{
+    ESP_LOGI(TAG, "ESP-NOW message received from %02X:%02X:%02X:%02X:%02X:%02X",
+             sender_mac[0], sender_mac[1], sender_mac[2], 
+             sender_mac[3], sender_mac[4], sender_mac[5]);
+    
+    switch (message->msg_type) {
+        case MSG_GAME_START:
+            ESP_LOGI(TAG, "Game start command received");
+            laser_turn_on(100);  // Turn laser on at full intensity
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);
+            gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 1);
+            break;
+        case MSG_GAME_STOP:
+            ESP_LOGI(TAG, "Game stop command received");
+            laser_turn_off();
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
+            gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
+            gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
+            break;
+        case MSG_LASER_ON:
+            ESP_LOGI(TAG, "Laser ON command");
+            laser_turn_on(message->data[0]);  // Intensity in data[0]
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);
+            break;
+        case MSG_LASER_OFF:
+            ESP_LOGI(TAG, "Laser OFF command");
+            laser_turn_off();
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
+            break;
+        case MSG_PAIRING_RESPONSE:
+            ESP_LOGI(TAG, "Pairing response received - paired successfully!");
+            is_paired = true;
+            if (pairing_timer) {
+                esp_timer_stop(pairing_timer);
+                ESP_LOGI(TAG, "Pairing timer stopped");
+            }
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);  // Status LED on when paired
+            break;
+        default:
+            ESP_LOGW(TAG, "Unknown message type: 0x%02X", message->msg_type);
+            break;
+    }
+}
+
 /**
  * Laser Unit Initialization
  * Initializes laser control (PWM), sensor (ADC), LEDs, safety monitoring, and ESP-NOW
@@ -133,28 +282,38 @@ static void init_laser_unit(void)
 {
     ESP_LOGI(TAG, "Initializing Laser Unit...");
     
-    // TODO: Initialize laser PWM control
-    ESP_LOGI(TAG, "  [TODO] Initialize Laser PWM (GPIO %d)", CONFIG_LASER_PIN);
+    // Initialize laser PWM control
+    ESP_LOGI(TAG, "  Initializing Laser PWM (GPIO %d)", CONFIG_LASER_PIN);
+    ESP_ERROR_CHECK(laser_control_init(CONFIG_LASER_PIN));
+    ESP_ERROR_CHECK(laser_set_safety_timeout(true));  // Enable safety timeout
     
-    // TODO: Initialize ADC for photoresistor/sensor
-    ESP_LOGI(TAG, "  [TODO] Initialize ADC Sensor (GPIO %d, Threshold: %d)", 
+    // Initialize ADC for photoresistor/sensor
+    ESP_LOGI(TAG, "  Initializing ADC Sensor (GPIO %d, Threshold: %d)", 
              CONFIG_SENSOR_PIN, CONFIG_SENSOR_THRESHOLD);
+    ESP_ERROR_CHECK(sensor_manager_init(CONFIG_SENSOR_PIN, CONFIG_SENSOR_THRESHOLD, CONFIG_DEBOUNCE_TIME));
+    ESP_ERROR_CHECK(sensor_register_callback(beam_break_callback));
     
-    // TODO: Initialize status LEDs
-    ESP_LOGI(TAG, "  [TODO] Initialize Status LEDs (Status: GPIO %d, Green: GPIO %d, Red: GPIO %d)",
+    // Initialize status LEDs
+    ESP_LOGI(TAG, "  Initializing Status LEDs (Status: GPIO %d, Green: GPIO %d, Red: GPIO %d)",
              CONFIG_LASER_STATUS_LED_PIN, CONFIG_SENSOR_LED_GREEN_PIN, CONFIG_SENSOR_LED_RED_PIN);
+    init_status_leds();
     
-    // TODO: Initialize safety cutoff
-    ESP_LOGI(TAG, "  [TODO] Initialize Safety Cutoff (timeout: 10 min)");
+    // Initialize ESP-NOW
+    ESP_LOGI(TAG, "  Initializing ESP-NOW (Channel: %d)", CONFIG_ESPNOW_CHANNEL);
+    ESP_ERROR_CHECK(espnow_manager_init(CONFIG_ESPNOW_CHANNEL, espnow_recv_callback_laser));
     
-    // TODO: Initialize ESP-NOW
-    ESP_LOGI(TAG, "  [TODO] Initialize ESP-NOW (Channel: %d)", CONFIG_ESPNOW_CHANNEL);
+    // Set up periodic pairing request timer (every 5 seconds until paired)
+    ESP_LOGI(TAG, "  Setting up pairing request timer");
+    const esp_timer_create_args_t pairing_timer_args = {
+        .callback = &pairing_timer_callback,
+        .name = "pairing_timer"
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&pairing_timer_args, &pairing_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(pairing_timer, 5000000));  // 5 seconds in microseconds
     
-    // TODO: Start beam detection
-    ESP_LOGI(TAG, "  [TODO] Start Beam Detection (debounce: %d ms)", CONFIG_DEBOUNCE_TIME);
-    
-    // TODO: Start pairing mode
-    ESP_LOGI(TAG, "  [TODO] Start Pairing Mode - waiting for main unit");
+    // Send initial pairing request
+    ESP_LOGI(TAG, "  Sending initial pairing request to main unit");
+    espnow_broadcast_message(MSG_PAIRING_REQUEST, NULL, 0);
     
     ESP_LOGI(TAG, "Laser Unit initialized - ready to emit beams and detect breaks");
 }
