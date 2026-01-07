@@ -227,9 +227,23 @@ esp_err_t wifi_ap_init(const laser_ap_config_t *config)
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
     }
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    // Check current WiFi mode to preserve APSTA if already set
+    wifi_mode_t current_wifi_mode;
+    esp_wifi_get_mode(&current_wifi_mode);
+    
+    // Only change mode if not already in APSTA mode (for ESP-NOW compatibility)
+    if (current_wifi_mode != WIFI_MODE_APSTA) {
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    } else {
+        ESP_LOGI(TAG, "Preserving APSTA mode for ESP-NOW");
+    }
+    
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    
+    // Only start WiFi if not already started
+    if (!is_initialized) {
+        ESP_ERROR_CHECK(esp_wifi_start());
+    }
 
     ESP_LOGI(TAG, "WiFi AP started: SSID=%s, Channel=%d, Max connections=%d",
              config->ssid, config->channel, config->max_connection);

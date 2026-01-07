@@ -123,6 +123,7 @@ esp_err_t notify_channel_change(uint8_t new_channel)
 /**
  * Button event callback (Main Unit)
  */
+#ifdef CONFIG_ENABLE_BUTTONS
 static void button_event_callback(uint8_t button_id, button_event_t event)
 {
     ESP_LOGI(TAG, "Button %d event: %d", button_id, event);
@@ -150,6 +151,7 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
         }
     }
 }
+#endif
 
 /**
  * Web server game control callback (Main Unit)
@@ -195,6 +197,24 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
             break;
         case MSG_PAIRING_REQUEST:
             ESP_LOGI(TAG, "Pairing request from module %d", message->module_id);
+            
+            // Add the laser unit as an ESP-NOW peer
+            esp_err_t ret = espnow_add_peer(sender_mac, message->module_id, 1); // role = 1 for laser unit
+            if (ret == ESP_OK) {
+                ESP_LOGI(TAG, "Laser unit %d added as peer", message->module_id);
+            } else if (ret == ESP_ERR_ESPNOW_EXIST) {
+                ESP_LOGD(TAG, "Peer already exists for module %d", message->module_id);
+            } else {
+                ESP_LOGE(TAG, "Failed to add peer: %s", esp_err_to_name(ret));
+            }
+            
+            // Send pairing response back to the laser unit
+            ret = espnow_send_message(sender_mac, MSG_PAIRING_RESPONSE, NULL, 0);
+            if (ret == ESP_OK) {
+                ESP_LOGI(TAG, "Pairing response sent to module %d", message->module_id);
+            } else {
+                ESP_LOGE(TAG, "Failed to send pairing response: %s", esp_err_to_name(ret));
+            }
             break;
         case MSG_CHANNEL_ACK:
             ESP_LOGD(TAG, "Channel change ACK from module %d", message->module_id);
@@ -261,6 +281,14 @@ static void init_main_unit(void)
 #else
     ESP_LOGI(TAG, "  Buzzer disabled in menuconfig");
 #endif
+    
+    // Initialize WiFi (required for ESP-NOW and web server)
+    ESP_LOGI(TAG, "  Initializing WiFi in APSTA mode");
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_LOGI(TAG, "  WiFi started in APSTA mode");
     
     // Initialize WiFi with automatic fallback
     // Try to connect to saved WiFi, if fails -> start AP mode
