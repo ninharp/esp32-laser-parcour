@@ -433,6 +433,17 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             }
             gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);  // Status LED on when paired
             break;
+        case MSG_RESET:
+            ESP_LOGI(TAG, "Reset command received");
+            // Turn off laser and all LEDs
+            laser_turn_off();
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
+            gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
+            gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
+            // Reset pairing status
+            is_paired = false;
+            ESP_LOGI(TAG, "Module reset complete");
+            break;
         case MSG_CHANNEL_CHANGE: {
             uint8_t new_channel = message->data[0];
             ESP_LOGI(TAG, "Channel change request to channel %d", new_channel);

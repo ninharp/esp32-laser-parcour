@@ -92,15 +92,19 @@ esp_err_t game_start(game_mode_t mode, const char *player_name)
     // Set game mode
     configuration.mode = mode;
     
-    // Change state to countdown
-    current_state = GAME_STATE_COUNTDOWN;
+    // Change state to running (skip countdown for web interface)
+    current_state = GAME_STATE_RUNNING;
     
     ESP_LOGI(TAG, "Game starting - Mode: %d, Player: %s", mode, current_player.name);
     
     xSemaphoreGive(game_mutex);
     
-    // TODO: Trigger countdown on display
-    // TODO: Notify ESP-NOW peers
+    // Broadcast MSG_GAME_START to all laser units
+    ESP_LOGI(TAG, "Broadcasting MSG_GAME_START to all laser units");
+    esp_err_t ret = espnow_broadcast_message(MSG_GAME_START, NULL, 0);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to broadcast game start: %s", esp_err_to_name(ret));
+    }
     
     return ESP_OK;
 }
@@ -152,6 +156,13 @@ esp_err_t game_stop(void)
              current_player.elapsed_time, current_player.beam_breaks, current_player.score);
     
     xSemaphoreGive(game_mutex);
+    
+    // Broadcast MSG_GAME_STOP to all laser units
+    ESP_LOGI(TAG, "Broadcasting MSG_GAME_STOP to all laser units");
+    esp_err_t ret = espnow_broadcast_message(MSG_GAME_STOP, NULL, 0);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to broadcast game stop: %s", esp_err_to_name(ret));
+    }
     
     // TODO: Save statistics to NVS
     // TODO: Display results on OLED
