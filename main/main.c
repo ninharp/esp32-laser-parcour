@@ -91,7 +91,7 @@ static void print_system_info(void)
  * Main Unit Initialization
  * Initializes display, buttons, buzzer, WiFi AP, web server, and ESP-NOW
  */
-static void init_control_module(void)
+static void init_main_unit(void)
 {
     ESP_LOGI(TAG, "Initializing Main Unit...");
     
@@ -126,7 +126,7 @@ static void init_control_module(void)
  * Laser Unit Initialization
  * Initializes laser control (PWM), sensor (ADC), LEDs, safety monitoring, and ESP-NOW
  */
-static void init_laser_module(void)
+static void init_laser_unit(void)
 {
     ESP_LOGI(TAG, "Initializing Laser Unit...");
     
@@ -172,9 +172,9 @@ void app_main(void)
     
     // Initialize module based on role
 #ifdef IS_CONTROL_MODULE
-    init_control_module();
+    init_main_unit();
 #elif defined(IS_LASER_MODULE)
-    init_laser_module();
+    init_laser_unit();
 #endif
     
     ESP_LOGI(TAG, "Initialization complete!");
