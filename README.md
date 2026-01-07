@@ -69,12 +69,14 @@ Built with **ESP-IDF 5.1+** for maximum performance and reliability.
 | ESP32-C3-DevKitM-1 | 5 (1 Main + 4 Laser Units) | $3-5 each |
 | 650nm Laser Module | 4-8 | $2-4 each |
 | OLED Display 128x64 | 1 | $5-8 |
-| Photoresistor/Photodiode | 4-8 | $1-2 each |
+| Photoresistor/Photodiode | 4-8 (one per Laser Unit) | $1-2 each |
 | Passive Buzzer | 1 | $1-2 |
 | Push Buttons | 4 | $0.50 each |
 | Resistors/Capacitors | Various | $5-10 |
 | Power Supplies | 5 | $3-5 each |
 | **Total (basic 4-beam setup)** | - | **$70-130** |
+
+*Note: Quantities shown are for a basic 4-beam course. Scale up based on desired number of laser beams.*
 
 ## 🚀 Setup Instructions
 

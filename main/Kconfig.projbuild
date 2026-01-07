@@ -27,6 +27,9 @@ menu "Laser Parcour Configuration"
             Unique identifier for this module (1-255).
             Main Unit typically uses ID 1.
             Laser Units use IDs 2-20.
+            
+            Note: If migrating from a previous version where sensors and lasers
+            were separate, you may need to reconfigure module IDs.
 
     config DEVICE_NAME
         string "Device Name"
