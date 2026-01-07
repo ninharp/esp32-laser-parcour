@@ -1,7 +1,7 @@
 /**
  * ESP-NOW Manager Component - Header
  * 
- * Manages ESP-NOW communication between control, laser, and sensor modules.
+ * Manages ESP-NOW communication between main unit and laser units.
  * 
  * @author ninharp
  * @date 2025

@@ -21,7 +21,7 @@ When adding new documentation:
 
 ### Planned Content
 
-- Complete wiring diagrams for all module types
+- Complete wiring diagrams for Main Unit and Laser Units
 - PCB designs for custom boards
 - 3D models for enclosures and mounts
 - Component datasheets and specifications
