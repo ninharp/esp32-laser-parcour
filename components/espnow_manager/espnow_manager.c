@@ -268,6 +268,79 @@ esp_err_t espnow_get_local_mac(uint8_t *mac_addr)
 }
 
 /**
+ * Update all existing peers with new channel
+ */
+esp_err_t espnow_update_all_peers_channel(uint8_t new_channel)
+{
+    if (new_channel < 1 || new_channel > 13) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    ESP_LOGI(TAG, "Updating all peers to channel %d", new_channel);
+    
+    // Get list of all current peers
+    esp_now_peer_info_t peer;
+    esp_now_peer_num_t peer_num;
+    
+    esp_err_t ret = esp_now_get_peer_num(&peer_num);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get peer count: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    ESP_LOGI(TAG, "Found %d total peers (%d encrypted)", peer_num.total_num, peer_num.encrypt_num);
+    
+    if (peer_num.total_num == 0) {
+        ESP_LOGI(TAG, "No peers to update");
+        return ESP_OK;
+    }
+    
+    // Iterate through all peers and update their channel
+    uint8_t peer_mac[6] = {0};
+    for (int i = 0; i < peer_num.total_num; i++) {
+        ret = esp_now_fetch_peer(i == 0, &peer);
+        if (ret == ESP_OK) {
+            // Store MAC address
+            memcpy(peer_mac, peer.peer_addr, 6);
+            
+            // Check if broadcast peer (all FFs)
+            bool is_broadcast = true;
+            for (int j = 0; j < 6; j++) {
+                if (peer_mac[j] != 0xFF) {
+                    is_broadcast = false;
+                    break;
+                }
+            }
+            
+            // Delete old peer
+            ret = esp_now_del_peer(peer_mac);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to delete peer for update: %s", esp_err_to_name(ret));
+                continue;
+            }
+            
+            // Re-add with new channel
+            peer.channel = new_channel;
+            ret = esp_now_add_peer(&peer);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to re-add peer: %s", esp_err_to_name(ret));
+            } else {
+                if (is_broadcast) {
+                    ESP_LOGI(TAG, "Updated broadcast peer to channel %d", new_channel);
+                } else {
+                    ESP_LOGI(TAG, "Updated peer %02X:%02X:%02X:%02X:%02X:%02X to channel %d",
+                             peer_mac[0], peer_mac[1], peer_mac[2],
+                             peer_mac[3], peer_mac[4], peer_mac[5], new_channel);
+                }
+            }
+        }
+    }
+    
+    ESP_LOGI(TAG, "All peers updated to channel %d", new_channel);
+    return ESP_OK;
+}
+
+/**
  * Change WiFi/ESP-NOW channel
  */
 esp_err_t espnow_change_channel(uint8_t new_channel)

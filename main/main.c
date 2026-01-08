@@ -332,6 +332,15 @@ static void init_main_unit(void)
     ESP_LOGI(TAG, "  Initializing ESP-NOW (Channel: %d)", CONFIG_ESPNOW_CHANNEL);
     ESP_ERROR_CHECK(espnow_manager_init(CONFIG_ESPNOW_CHANNEL, espnow_recv_callback_main));
     
+    // Update all peers with current WiFi channel (in case we connected to external WiFi)
+    uint8_t actual_channel;
+    wifi_second_chan_t second;
+    esp_wifi_get_channel(&actual_channel, &second);
+    if (actual_channel != CONFIG_ESPNOW_CHANNEL) {
+        ESP_LOGI(TAG, "  Updating existing peers from channel %d to %d", CONFIG_ESPNOW_CHANNEL, actual_channel);
+        espnow_update_all_peers_channel(actual_channel);
+    }
+    
     // Initialize game logic
     ESP_LOGI(TAG, "  Initializing Game Logic");
     ESP_ERROR_CHECK(game_logic_init());

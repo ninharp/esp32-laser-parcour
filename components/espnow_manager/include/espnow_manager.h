@@ -146,6 +146,15 @@ esp_err_t espnow_get_peers(espnow_peer_info_t *peers, size_t max_peers, size_t *
 esp_err_t espnow_get_local_mac(uint8_t *mac_addr);
 
 /**
+ * Update all existing peers with new channel
+ * Call this after WiFi channel change to update peer configurations
+ * 
+ * @param new_channel New channel (1-13)
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t espnow_update_all_peers_channel(uint8_t new_channel);
+
+/**
  * Change WiFi/ESP-NOW channel
  * 
  * @param new_channel New channel (1-13)
