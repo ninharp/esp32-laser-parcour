@@ -37,6 +37,7 @@ static const char *TAG = "SSD1306";
 #define SSD1306_CMD_MEMORY_MODE 0x20
 #define SSD1306_CMD_COLUMN_ADDR 0x21
 #define SSD1306_CMD_PAGE_ADDR 0x22
+#define SSD1306_CMD_COM_SCAN_INC 0xC0
 #define SSD1306_CMD_COM_SCAN_DEC 0xC8
 #define SSD1306_CMD_SEG_REMAP 0xA1
 #define SSD1306_CMD_CHARGE_PUMP 0x8D
@@ -319,8 +320,20 @@ esp_err_t ssd1306_init(gpio_num_t sda_pin, gpio_num_t scl_pin, uint32_t freq_hz)
     write_command(0x14); // Enable charge pump
     write_command(SSD1306_CMD_MEMORY_MODE);
     write_command(0x00); // Horizontal addressing mode
-    write_command(SSD1306_CMD_SEG_REMAP | 0x01);
-    write_command(SSD1306_CMD_COM_SCAN_DEC);
+    
+    // Display rotation (CONFIG_DISPLAY_ROTATION_180)
+#ifdef CONFIG_DISPLAY_ROTATION_180
+    // 180° rotation
+    write_command(SSD1306_CMD_SEG_REMAP | 0x00);  // Column address 0 is mapped to SEG0
+    write_command(SSD1306_CMD_COM_SCAN_INC);       // Scan from COM0 to COM[N-1]
+    ESP_LOGI(TAG, "Display rotation: 180°");
+#else
+    // Normal orientation (0°)
+    write_command(SSD1306_CMD_SEG_REMAP | 0x01);  // Column address 127 is mapped to SEG0
+    write_command(SSD1306_CMD_COM_SCAN_DEC);       // Scan from COM[N-1] to COM0
+    ESP_LOGI(TAG, "Display rotation: 0°");
+#endif
+    
     write_command(SSD1306_CMD_SET_COM_PINS);
     write_command(0x02); // Sequential COM pin config for 32px
     write_command(SSD1306_CMD_SET_CONTRAST);

@@ -180,6 +180,14 @@ menu "Laser Parcour Configuration"
             help
                 I2C bus frequency in Hz (100kHz or 400kHz).
 
+        config DISPLAY_ROTATION_180
+            bool "Rotate Display 180 Degrees"
+            default n
+            depends on MODULE_ROLE_CONTROL && ENABLE_DISPLAY
+            help
+                Rotate the OLED display by 180 degrees.
+                Enable this if your display is mounted upside-down.
+
         config ENABLE_BUTTONS
             bool "Enable Physical Buttons"
             default y
