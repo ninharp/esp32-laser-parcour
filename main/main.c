@@ -120,6 +120,92 @@ esp_err_t notify_channel_change(uint8_t new_channel)
 }
 
 #ifdef CONFIG_MODULE_ROLE_CONTROL
+// Display update task handle
+static TaskHandle_t display_update_task_handle = NULL;
+
+/**
+ * Display update task (Main Unit)
+ * Periodically updates the OLED display with current game status
+ */
+static void display_update_task(void *pvParameters)
+{
+    ESP_LOGI(TAG, "Display update task started");
+    
+    TickType_t last_wake_time = xTaskGetTickCount();
+    const TickType_t update_interval = pdMS_TO_TICKS(100); // Update every 100ms
+    
+    while (1) {
+        game_state_t state = game_get_state();
+        player_data_t player_data;
+        
+        // Get laser units info
+        laser_unit_info_t units[MAX_LASER_UNITS];
+        size_t unit_count = 0;
+        game_get_laser_units(units, MAX_LASER_UNITS, &unit_count);
+        
+        // Count online units
+        size_t online_count = 0;
+        for (size_t i = 0; i < unit_count; i++) {
+            if (units[i].is_online) {
+                online_count++;
+            }
+        }
+        
+        switch (state) {
+            case GAME_STATE_IDLE:
+                display_set_screen(SCREEN_IDLE);
+                // Show welcome message with connected units
+                display_clear();
+                display_text("Laser Parcour", 0);
+                display_text("Ready to Start", 2);
+                char units_line[32];
+                snprintf(units_line, sizeof(units_line), "Units: %d", online_count);
+                display_text(units_line, 4);
+                display_text("Start via Web", 6);
+                display_update();
+                break;
+                
+            case GAME_STATE_COUNTDOWN:
+                display_set_screen(SCREEN_GAME_COUNTDOWN);
+                if (game_get_player_data(&player_data) == ESP_OK) {
+                    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+                    uint32_t countdown_remaining = 0;
+                    if (now < player_data.start_time) {
+                        countdown_remaining = (player_data.start_time - now) / 1000;
+                    }
+                    display_countdown(countdown_remaining);
+                }
+                break;
+                
+            case GAME_STATE_RUNNING:
+            case GAME_STATE_PENALTY:
+            case GAME_STATE_PAUSED:
+                display_set_screen(SCREEN_GAME_RUNNING);
+                if (game_get_player_data(&player_data) == ESP_OK) {
+                    display_game_status(player_data.elapsed_time, 
+                                      player_data.beam_breaks, 
+                                      player_data.score);
+                }
+                break;
+                
+            case GAME_STATE_COMPLETE:
+                display_set_screen(SCREEN_GAME_COMPLETE);
+                if (game_get_player_data(&player_data) == ESP_OK) {
+                    display_game_results(player_data.elapsed_time,
+                                       player_data.beam_breaks,
+                                       player_data.score);
+                }
+                break;
+                
+            default:
+                break;
+        }
+        
+        // Wait for next update interval
+        vTaskDelayUntil(&last_wake_time, update_interval);
+    }
+}
+
 /**
  * Button event callback (Main Unit)
  */
@@ -344,6 +430,14 @@ static void init_main_unit(void)
     // Initialize game logic
     ESP_LOGI(TAG, "  Initializing Game Logic");
     ESP_ERROR_CHECK(game_logic_init());
+    
+#ifdef CONFIG_ENABLE_DISPLAY
+    // Start display update task
+    if (CONFIG_I2C_SDA_PIN != -1 && CONFIG_I2C_SCL_PIN != -1) {
+        ESP_LOGI(TAG, "  Starting display update task");
+        xTaskCreate(display_update_task, "display_update", 4096, NULL, 5, &display_update_task_handle);
+    }
+#endif
     
     // Broadcast reset to trigger re-pairing of existing laser units
     ESP_LOGI(TAG, "  Broadcasting reset to all units for re-pairing");

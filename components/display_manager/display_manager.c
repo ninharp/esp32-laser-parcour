@@ -110,7 +110,7 @@ esp_err_t display_set_screen(display_screen_t screen)
         "IDLE", "MENU", "COUNTDOWN", "RUNNING", "PAUSED", "COMPLETE", "SETTINGS", "STATS"
     };
     
-    ESP_LOGI(TAG, "Screen changed to: %s", screen_names[screen]);
+    ESP_LOGD(TAG, "Screen changed to: %s", screen_names[screen]);
     
     // TODO: Render screen on OLED
     
@@ -130,7 +130,7 @@ esp_err_t display_game_status(uint32_t elapsed_time, uint16_t beam_breaks, int32
     uint32_t seconds = (elapsed_time % 60000) / 1000;
     uint32_t millis = (elapsed_time % 1000) / 10;
     
-    ESP_LOGI(TAG, "Game Status - Time: %02lu:%02lu.%02lu, Breaks: %d, Score: %ld",
+    ESP_LOGD(TAG, "Game Status - Time: %02lu:%02lu.%02lu, Breaks: %d, Score: %ld",
              minutes, seconds, millis, beam_breaks, score);
     
     // TODO: Display on OLED
@@ -150,7 +150,7 @@ esp_err_t display_countdown(uint8_t seconds)
         return ESP_FAIL;
     }
     
-    ESP_LOGI(TAG, "Countdown: %d", seconds);
+    ESP_LOGD(TAG, "Countdown: %d", seconds);
     
     // TODO: Display large countdown number on OLED
     
@@ -166,7 +166,7 @@ esp_err_t display_text(const char *message, uint8_t line)
         return ESP_FAIL;
     }
     
-    ESP_LOGI(TAG, "Display text (line %d): %s", line, message);
+    ESP_LOGD(TAG, "Display text (line %d): %s", line, message);
     
     // TODO: Display text on OLED at specified line
     

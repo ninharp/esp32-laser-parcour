@@ -1073,6 +1073,63 @@ laser_unit_count = active_count;  // Update to reflect removals
 - Webinterface zeigt nur aktive/erreichbare Units
 - Automatische Bereinigung nach 1 Minute Inaktivität
 
+### OLED Display Integration (2025-01-08)
+
+**Implementation:** Vollständige Display-Integration für Main Unit
+
+**Features:**
+1. **Display Update Task:**
+   - Eigener FreeRTOS Task mit 100ms Update-Intervall
+   - Automatische Screen-Auswahl basierend auf Game-State
+   - 4KB Stack-Größe, Priorität 5
+
+2. **State-basierte Screens:**
+   - **IDLE**: Welcome-Screen mit Connected Units Counter
+   - **COUNTDOWN**: Countdown vor Spielstart
+   - **RUNNING/PENALTY/PAUSED**: Live Game-Status (Zeit, Breaks, Score)
+   - **COMPLETE**: Endergebnis-Anzeige
+
+3. **Display-Inhalte:**
+   - Welcome Screen: "Laser Parcour", "Ready to Start", "Units: X", "Start via Web"
+   - Game Running: Echtzeit-Updates von Zeit, Beam Breaks, Score
+   - Game Complete: Final Time, Beam Breaks, Final Score
+
+**Code-Änderungen:**
+- `main/main.c`: display_update_task() implementiert (100ms Update-Intervall)
+- `main/main.c`: Task-Start nach game_logic_init()
+- `main/main.c`: display_update_task_handle Variable hinzugefügt
+
+**Display-Update-Flow:**
+```c
+while (1) {
+    game_state = game_get_state();
+    game_get_player_data(&player_data);
+    game_get_laser_units(units, &count);
+    
+    switch (game_state) {
+        case IDLE: Show welcome + unit count
+        case COUNTDOWN: Show countdown
+        case RUNNING: Show time/breaks/score
+        case COMPLETE: Show final results
+    }
+    
+    vTaskDelayUntil(100ms);
+}
+```
+
+**Konfiguration:**
+- Display aktiviert wenn CONFIG_ENABLE_DISPLAY=y
+- Pins: CONFIG_I2C_SDA_PIN, CONFIG_I2C_SCL_PIN (z.B. 19/18)
+- Frequenz: CONFIG_I2C_FREQUENCY (100kHz oder 400kHz)
+- Display-Typ: CONFIG_OLED_SSD1306 oder CONFIG_OLED_SH1106
+
+**Ergebnis:**
+- ✅ Automatische Display-Updates alle 100ms
+- ✅ Echtzeit-Anzeige von Spielstatus
+- ✅ Connected Units werden gezählt und angezeigt
+- ✅ State-abhängige Screen-Verwaltung
+- ✅ Keine manuelle Display-Aktualisierung nötig
+
 ---
 
 ## 🐛 Debugging
