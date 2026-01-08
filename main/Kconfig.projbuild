@@ -191,7 +191,7 @@ menu "Laser Parcour Configuration"
         config BUTTON1_PIN
             int "Button 1 Pin (Start/Stop)"
             range -1 21
-            default 2
+            default 1
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
                 GPIO pin for Button 1 (Start/Stop game).
@@ -209,7 +209,7 @@ menu "Laser Parcour Configuration"
         config BUTTON3_PIN
             int "Button 3 Pin (Reset)"
             range -1 21
-            default 4
+            default 7
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
                 GPIO pin for Button 3 (Reset score).
@@ -243,7 +243,7 @@ menu "Laser Parcour Configuration"
         config LASER_PIN
             int "Laser Control Pin"
             range 0 21
-            default 10
+            default 2
             depends on MODULE_ROLE_LASER
             help
                 GPIO pin for laser diode control (PWM capable).
@@ -251,7 +251,7 @@ menu "Laser Parcour Configuration"
         config LASER_STATUS_LED_PIN
             int "Laser Status LED Pin"
             range 0 21
-            default 2
+            default 21
             depends on MODULE_ROLE_LASER
             help
                 GPIO pin for status LED on laser unit.
@@ -259,7 +259,7 @@ menu "Laser Parcour Configuration"
         config SENSOR_PIN
             int "Photoresistor ADC Pin"
             range 0 4
-            default 0
+            default 4
             depends on MODULE_ROLE_LASER
             help
                 ADC channel for photoresistor (GPIO0-4 = ADC1_CH0-4).
@@ -268,7 +268,7 @@ menu "Laser Parcour Configuration"
         config SENSOR_LED_GREEN_PIN
             int "Sensor Green LED Pin"
             range 0 21
-            default 1
+            default 20
             depends on MODULE_ROLE_LASER
             help
                 GPIO pin for green status LED (beam detected).
@@ -276,7 +276,7 @@ menu "Laser Parcour Configuration"
         config SENSOR_LED_RED_PIN
             int "Sensor Red LED Pin"
             range 0 21
-            default 2
+            default 10
             depends on MODULE_ROLE_LASER
             help
                 GPIO pin for red status LED (beam broken).
