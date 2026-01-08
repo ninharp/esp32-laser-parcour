@@ -148,13 +148,13 @@ esp_err_t game_stop(void)
     current_player.end_time = (uint32_t)(esp_timer_get_time() / 1000);
     uint32_t raw_elapsed = current_player.end_time - current_player.start_time;
     
-    // Add accumulated penalty time to final elapsed time
-    current_player.elapsed_time = raw_elapsed + total_penalty_time;
+    // Subtract accumulated penalty time from final elapsed time (penalty pauses the clock)
+    current_player.elapsed_time = raw_elapsed - total_penalty_time;
     
-    // If currently in penalty, add remaining penalty time
+    // If currently in penalty, subtract remaining penalty time
     if (current_state == GAME_STATE_PENALTY && penalty_start_time > 0) {
         uint32_t penalty_progress = current_player.end_time - penalty_start_time;
-        current_player.elapsed_time += penalty_progress;
+        current_player.elapsed_time -= penalty_progress;
     }
     
     // Calculate final score
@@ -323,15 +323,14 @@ esp_err_t game_get_player_data(player_data_t *player_data)
     // Calculate elapsed time for running games
     if (current_state == GAME_STATE_RUNNING || current_state == GAME_STATE_PENALTY) {
         uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+        // Subtract penalty times from elapsed time (penalty pauses the clock)
         uint32_t raw_elapsed = now - current_player.start_time;
+        player_data->elapsed_time = raw_elapsed - total_penalty_time;
         
-        // Add accumulated penalty time
-        player_data->elapsed_time = raw_elapsed + total_penalty_time;
-        
-        // If currently in penalty, add current penalty progress
+        // If currently in penalty, subtract current penalty progress as well
         if (current_state == GAME_STATE_PENALTY && penalty_start_time > 0) {
             uint32_t current_penalty_progress = now - penalty_start_time;
-            player_data->elapsed_time += current_penalty_progress;
+            player_data->elapsed_time -= current_penalty_progress;
         }
     }
     

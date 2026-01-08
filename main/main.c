@@ -136,6 +136,7 @@ static void display_update_task(void *pvParameters)
     
     game_state_t last_state = GAME_STATE_IDLE;
     bool complete_screen_shown = false;
+    uint32_t last_status_log = 0; // For periodic status logging
     
     while (1) {
         game_state_t state = game_get_state();
@@ -238,6 +239,24 @@ static void display_update_task(void *pvParameters)
             complete_screen_shown = false;
         }
         last_state = state;
+        
+        // Periodic status logging every 10 seconds during active game
+        if (state == GAME_STATE_RUNNING || state == GAME_STATE_PENALTY || state == GAME_STATE_PAUSED) {
+            uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+            if (now - last_status_log >= 10000) { // Every 10 seconds
+                if (game_get_player_data(&player_data) == ESP_OK) {
+                    uint32_t minutes = player_data.elapsed_time / 60000;
+                    uint32_t seconds = (player_data.elapsed_time % 60000) / 1000;
+                    const char* state_str = (state == GAME_STATE_RUNNING) ? "RUNNING" : 
+                                           (state == GAME_STATE_PENALTY) ? "PENALTY" : "PAUSED";
+                    ESP_LOGI(TAG, "=== GAME STATUS ===  State: %s | Time: %02lu:%02lu | Breaks: %d | Score: %ld",
+                            state_str, minutes, seconds, player_data.beam_breaks, player_data.score);
+                }
+                last_status_log = now;
+            }
+        } else {
+            last_status_log = 0; // Reset when not in active game
+        }
         
         // Wait for next update interval
         vTaskDelayUntil(&last_wake_time, update_interval);
