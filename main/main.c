@@ -291,14 +291,15 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
             game_beam_broken(message->module_id);
             break;
         case MSG_HEARTBEAT:
-            ESP_LOGD(TAG, "Heartbeat from module %d", message->module_id);
             // Ensure the laser unit is in the ESP-NOW peer list
             esp_err_t peer_ret = espnow_add_peer(sender_mac, message->module_id, 1);
             if (peer_ret == ESP_OK) {
-                ESP_LOGI(TAG, "Laser unit %d re-added as peer (after main unit restart)", message->module_id);
+                // Only log when peer is actually added (e.g., after main unit restart)
+                ESP_LOGI(TAG, "Laser unit %d re-added as ESP-NOW peer", message->module_id);
             } else if (peer_ret != ESP_ERR_ESPNOW_EXIST) {
                 ESP_LOGE(TAG, "Failed to add peer during heartbeat: %s", esp_err_to_name(peer_ret));
             }
+            // Silent when peer already exists - no need to log every 3 seconds
             break;
         case MSG_STATUS_UPDATE:
             ESP_LOGD(TAG, "Status update from module %d", message->module_id);
