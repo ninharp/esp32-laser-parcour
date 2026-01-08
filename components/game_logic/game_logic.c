@@ -324,10 +324,22 @@ esp_err_t game_get_player_data(player_data_t *player_data)
         uint32_t raw_elapsed = now - current_player.start_time;
         player_data->elapsed_time = raw_elapsed + total_penalty_time;
         
-        // Check for max time limit (if configured)
+        // Check for max time limit (if configured) and auto-stop
         if (configuration.max_time > 0 && player_data->elapsed_time >= (configuration.max_time * 1000)) {
             // Max time exceeded - abort game automatically
-            ESP_LOGW(TAG, "Max time limit reached (%lu seconds)", configuration.max_time);
+            ESP_LOGW(TAG, "Max time limit reached (%lu seconds) - auto-stopping game", configuration.max_time);
+            
+            // Set completion status BEFORE releasing mutex and calling game_stop
+            current_player.completion = COMPLETION_ABORTED_TIME;
+            
+            // Release mutex before calling game_stop (which will acquire it again)
+            xSemaphoreGive(game_mutex);
+            
+            // Auto-stop the game
+            game_stop();
+            
+            // Return early - game_stop already set final times
+            return ESP_OK;
         }
     }
     

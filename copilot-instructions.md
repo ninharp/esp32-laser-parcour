@@ -759,7 +759,27 @@ player_data->elapsed_time = raw_elapsed + total_penalty_time;
 **Max-Zeit-Limit:**
 - `configuration.max_time` (Sekunden, 0 = unbegrenzt)
 - Bei Überschreitung: Automatischer Abort mit `COMPLETION_ABORTED_TIME`
-- Geprüft in `game_get_player_data()` (TODO: Auto-Stop implementieren)
+- **IMPLEMENTIERT (2025-01-08):** Auto-Stop in `game_get_player_data()`
+  - Prüft elapsed_time gegen max_time bei jedem Abruf
+  - Setzt `completion = COMPLETION_ABORTED_TIME`
+  - Ruft automatisch `game_stop()` auf
+  - Sendet MSG_GAME_STOP an alle Laser Units
+
+**Penalty-System (Sofortige Addition - 2025-01-08):**
+```c
+// Bei Beam-Break in game_beam_broken():
+total_penalty_time += (configuration.penalty_time * 1000);  // SOFORT addiert
+
+// In game_get_player_data():
+player_data->elapsed_time = raw_elapsed + total_penalty_time;  // Penalty ist bereits enthalten
+```
+
+**Beispiel-Spielablauf mit Max-Zeit:**
+1. Start: Zeit = 0:00, max_time = 180 (3 Minuten)
+2. Nach 2:30: Beam Break → +15s → Zeit: 2:45
+3. Nach 2:50: Beam Break → +15s → Zeit: 3:05
+4. **Auto-Stop**: Zeit > 3:00 → Game stoppt automatisch mit COMPLETION_ABORTED_TIME
+5. Display zeigt: "TIME LIMIT!" / Final Zeit: 3:05
 
 ### Laser Unit MSG_RESET Support
 
