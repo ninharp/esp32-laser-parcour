@@ -726,6 +726,10 @@ CONFIG_SENSOR_LED_RED_PIN=2
 - `sensor_manager/sensor_manager.c`: Default Threshold von 500 auf 2000 erhöht
 - `sensor_manager/sensor_manager.c`: Live ADC-Logging jede Sekunde hinzugefügt
 - `main/Kconfig.projbuild`: SENSOR_THRESHOLD default auf 2000, bessere Dokumentation
+- `main/main.c` (LASER): Multi-Channel Scanning in pairing_timer_callback() implementiert
+- `main/main.c` (LASER): Channel-Scan State Reset in MSG_PAIRING_RESPONSE und MSG_RESET
+- `wifi_ap_manager.c`: wifi_apsta_init() Funktion für korrekte APSTA-Initialisierung
+- `main/main.c` (CONTROL): Verwendung von wifi_apsta_init() für STA+AP netif Erstellung
 
 ### Sensor Detection Threshold
 
@@ -744,6 +748,116 @@ CONFIG_SENSOR_LED_RED_PIN=2
 **Debugging:**
 Monitor-Logs zeigen nun: `ADC: 850 | Threshold: 2000 | Beam: BROKEN`
 Bei anliegendem Laser: `ADC: 4095 | Threshold: 2000 | Beam: PRESENT`
+
+### WiFi Channel Synchronization (CRITICAL für Pairing)
+
+**Problem:** Laser Unit kann Main Unit nicht finden wenn Channels unterschiedlich sind
+**Ursache:** 
+- Laser Unit startet standardmäßig auf ESP-NOW Channel 1
+- Main Unit könnte bereits mit WLAN verbunden sein (z.B. Channel 6)
+- ESP-NOW funktioniert nur auf dem gleichen WiFi-Channel
+- Laser Unit kann keine Pairing Requests senden wenn auf falschem Channel
+
+**Lösung: Multi-Channel Scanning auf Laser Unit**
+Die Laser Unit muss alle WiFi-Channels durchscannen bis sie die Main Unit findet:
+
+```c
+// Laser Unit - Channel Scanning Implementation
+static uint8_t current_scan_channel = 1;
+static uint8_t scan_attempts_on_channel = 0;
+static const uint8_t MAX_ATTEMPTS_PER_CHANNEL = 3;  // 3 Versuche pro Channel
+static const uint8_t MAX_WIFI_CHANNEL = 13;          // Channels 1-13
+
+static void pairing_timer_callback(void *arg)
+{
+    if (!is_paired) {
+        ESP_LOGI(TAG, "Sending pairing request on channel %d (attempt %d/%d)...", 
+                 current_scan_channel, scan_attempts_on_channel + 1, MAX_ATTEMPTS_PER_CHANNEL);
+        
+        espnow_broadcast_message(MSG_PAIRING_REQUEST, NULL, 0);
+        scan_attempts_on_channel++;
+        
+        // Nach MAX_ATTEMPTS_PER_CHANNEL Versuchen zum nächsten Channel wechseln
+        if (scan_attempts_on_channel >= MAX_ATTEMPTS_PER_CHANNEL) {
+            scan_attempts_on_channel = 0;
+            current_scan_channel++;
+            
+            // Zurück zu Channel 1 nach Channel 13
+            if (current_scan_channel > MAX_WIFI_CHANNEL) {
+                current_scan_channel = 1;
+                ESP_LOGI(TAG, "Completed full channel scan, restarting from channel 1");
+            }
+            
+            // Channel wechseln
+            ESP_LOGI(TAG, "Switching to channel %d for pairing scan", current_scan_channel);
+            esp_wifi_set_channel(current_scan_channel, WIFI_SECOND_CHAN_NONE);
+        }
+    }
+}
+
+// Bei erfolgreichem Pairing (MSG_PAIRING_RESPONSE):
+case MSG_PAIRING_RESPONSE: {
+    ESP_LOGI(TAG, "Pairing successful on channel %d!", current_scan_channel);
+    is_paired = true;
+    scan_attempts_on_channel = 0;  // Reset scan state
+    // ... rest of pairing response handler
+}
+```
+
+**Konfiguration:**
+- Pairing Timer: 5 Sekunden Intervall
+- 3 Versuche pro Channel (15 Sekunden pro Channel)
+- Vollständiger Scan 1-13: ~195 Sekunden (3.25 Minuten) im worst case
+- Best case: Sofortiges Pairing auf dem ersten Channel
+
+**Alternative: WiFi AP Scan (schneller aber nur wenn AP aktiv):**
+```c
+// Optional: Vor Channel-Scanning WiFi AP scannen
+esp_err_t find_main_unit_channel(uint8_t *channel)
+{
+    wifi_scan_config_t scan_config = {
+        .ssid = (uint8_t*)CONFIG_WIFI_SSID,  // "LaserParcour"
+        .show_hidden = false,
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+    };
+    
+    esp_wifi_scan_start(&scan_config, true);
+    
+    uint16_t ap_count = 1;
+    wifi_ap_record_t ap_info;
+    
+    if (esp_wifi_scan_get_ap_records(&ap_count, &ap_info) == ESP_OK && ap_count > 0) {
+        *channel = ap_info.primary;
+        ESP_LOGI(TAG, "Found Main Unit AP on channel %d", *channel);
+        return ESP_OK;
+    }
+    
+    return ESP_FAIL;
+}
+```
+
+**Empfehlung:**
+1. **Startup:** WiFi AP Scan nach Main Unit's SSID
+2. **Wenn gefunden:** Direkt zu dem Channel wechseln und pairen
+3. **Wenn nicht gefunden:** Multi-Channel Scan starten (1-13)
+
+**Code-Änderungen (2025-01-08):**
+- Laser Unit: Implementierung von Channel-Scanning in pairing_timer_callback()
+- Laser Unit: WiFi AP Scan als Optimierung für schnelleres Pairing (TODO)
+- Main Unit: wifi_apsta_init() für korrekte APSTA netif Initialisierung
+- Main Unit: Dokumentation des Channel-Sync-Problems
+
+**Implementiert in main.c (CONFIG_MODULE_ROLE_LASER):**
+- Variablen: current_scan_channel, scan_attempts_on_channel, MAX_ATTEMPTS_PER_CHANNEL (3), MAX_WIFI_CHANNEL (13)
+- pairing_timer_callback(): Automatischer Channel-Wechsel nach 3 erfolglosen Versuchen
+- MSG_PAIRING_RESPONSE: Loggt erfolgreichen Channel, resettet Scan-State
+- MSG_RESET: Resettet Channel auf CONFIG_ESPNOW_CHANNEL, startet Scan neu
+
+**Performance:**
+- 3 Versuche pro Channel à 5 Sekunden = 15 Sekunden pro Channel
+- Best Case: Sofort auf Channel 1 (5-15 Sekunden)
+- Typical Case: Channel 6 (75-90 Sekunden)
+- Worst Case: Channel 13 (195 Sekunden = 3.25 Minuten)
 
 ---
 

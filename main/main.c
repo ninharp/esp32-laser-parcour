@@ -341,14 +341,42 @@ static void init_main_unit(void)
 static bool is_paired = false;
 static esp_timer_handle_t pairing_timer = NULL;
 
+// Channel scanning state
+static uint8_t current_scan_channel = CONFIG_ESPNOW_CHANNEL;
+static uint8_t scan_attempts_on_channel = 0;
+static const uint8_t MAX_ATTEMPTS_PER_CHANNEL = 3;  // 3 pairing attempts per channel
+static const uint8_t MAX_WIFI_CHANNEL = 13;          // WiFi channels 1-13
+
 /**
- * Pairing request timer callback
+ * Pairing request timer callback with channel scanning
  */
 static void pairing_timer_callback(void *arg)
 {
     if (!is_paired) {
-        ESP_LOGI(TAG, "Sending pairing request (not yet paired)...");
+        ESP_LOGI(TAG, "Sending pairing request on channel %d (attempt %d/%d)...", 
+                 current_scan_channel, scan_attempts_on_channel + 1, MAX_ATTEMPTS_PER_CHANNEL);
+        
         espnow_broadcast_message(MSG_PAIRING_REQUEST, NULL, 0);
+        scan_attempts_on_channel++;
+        
+        // After MAX_ATTEMPTS_PER_CHANNEL, switch to next channel
+        if (scan_attempts_on_channel >= MAX_ATTEMPTS_PER_CHANNEL) {
+            scan_attempts_on_channel = 0;
+            current_scan_channel++;
+            
+            // Wrap back to channel 1 after channel 13
+            if (current_scan_channel > MAX_WIFI_CHANNEL) {
+                current_scan_channel = 1;
+                ESP_LOGI(TAG, "Completed full channel scan, restarting from channel 1");
+            }
+            
+            // Switch channel
+            ESP_LOGI(TAG, "No response, switching to channel %d", current_scan_channel);
+            esp_err_t ret = esp_wifi_set_channel(current_scan_channel, WIFI_SECOND_CHAN_NONE);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to switch channel: %s", esp_err_to_name(ret));
+            }
+        }
     }
 }
 
@@ -440,8 +468,9 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
             break;
         case MSG_PAIRING_RESPONSE:
-            ESP_LOGI(TAG, "Pairing response received - paired successfully!");
+            ESP_LOGI(TAG, "Pairing response received - paired successfully on channel %d!", current_scan_channel);
             is_paired = true;
+            scan_attempts_on_channel = 0;  // Reset scan state
             if (pairing_timer) {
                 esp_timer_stop(pairing_timer);
                 ESP_LOGI(TAG, "Pairing timer stopped");
@@ -457,11 +486,18 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
             gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
             gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
-            // Reset pairing status and restart pairing timer
+            
+            // Reset pairing state
             is_paired = false;
+            
+            // Reset channel scan state
+            current_scan_channel = CONFIG_ESPNOW_CHANNEL;  // Back to configured start channel
+            scan_attempts_on_channel = 0;
+            
+            // Restart pairing timer
             if (pairing_timer) {
                 esp_timer_start_periodic(pairing_timer, 5000000); // 5 seconds
-                ESP_LOGI(TAG, "Pairing timer restarted");
+                ESP_LOGI(TAG, "Pairing timer restarted, will scan from channel %d", current_scan_channel);
             }
             ESP_LOGI(TAG, "Module reset complete");
             break;
