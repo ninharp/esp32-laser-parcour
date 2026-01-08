@@ -440,7 +440,7 @@ esp_err_t game_get_laser_units(laser_unit_info_t *units, size_t max_units, size_
             
             // Also remove from ESP-NOW peers
             extern esp_err_t espnow_remove_peer(const uint8_t *mac_addr);
-            espnow_remove_peer(laser_units[i].mac_address);
+            espnow_remove_peer(laser_units[i].mac_addr);
             
             continue;  // Skip this unit (don't copy to active list)
         }
