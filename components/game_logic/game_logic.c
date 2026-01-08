@@ -426,15 +426,46 @@ esp_err_t game_get_laser_units(laser_unit_info_t *units, size_t max_units, size_
     
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
     
-    // Update online status based on last_seen (5 second timeout)
+    // Update online status and remove dead units
+    // Online timeout: 15 seconds (5x heartbeat interval for stability)
+    // Removal timeout: 60 seconds (units that haven't sent anything)
+    size_t active_count = 0;
     for (size_t i = 0; i < laser_unit_count; i++) {
-        if (now - laser_units[i].last_seen > 5000) {
+        uint32_t time_since_last_seen = now - laser_units[i].last_seen;
+        
+        // Remove units that haven't sent anything in 60 seconds
+        if (time_since_last_seen > 60000) {
+            ESP_LOGI(TAG, "Removing inactive laser unit %d (offline for %lu seconds)",
+                     laser_units[i].module_id, time_since_last_seen / 1000);
+            
+            // Also remove from ESP-NOW peers
+            extern esp_err_t espnow_remove_peer(const uint8_t *mac_addr);
+            espnow_remove_peer(laser_units[i].mac_address);
+            
+            continue;  // Skip this unit (don't copy to active list)
+        }
+        
+        // Update online status (15 second timeout)
+        if (time_since_last_seen > 15000) {
             laser_units[i].is_online = false;
             snprintf(laser_units[i].status, sizeof(laser_units[i].status), "Offline");
         } else {
             laser_units[i].is_online = true;
             snprintf(laser_units[i].status, sizeof(laser_units[i].status), "Online");
         }
+        
+        // Copy to compacted array if not at same position
+        if (active_count != i) {
+            laser_units[active_count] = laser_units[i];
+        }
+        active_count++;
+    }
+    
+    // Update count to reflect removed units
+    if (active_count < laser_unit_count) {
+        ESP_LOGI(TAG, "Removed %zu inactive laser units, %zu remaining",
+                 laser_unit_count - active_count, active_count);
+        laser_unit_count = active_count;
     }
     
     size_t copy_count = (laser_unit_count < max_units) ? laser_unit_count : max_units;

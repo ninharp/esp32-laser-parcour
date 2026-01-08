@@ -990,6 +990,89 @@ if (!is_initialized) {
 - Automatische Verbindung zu bekannten Netzwerken funktioniert
 - Fallback zu AP-Modus bei Verbindungsfehlern bleibt erhalten
 
+### Online Status Flackern Fix (2025-01-08)
+
+**Problem:** Online-Status im Webinterface flackert zwischen Online/Offline
+
+**Ursache:**
+- Heartbeats werden alle 3 Sekunden gesendet
+- Online-Timeout war nur 5 Sekunden
+- Bei minimaler Verzögerung wurde Unit sofort als offline markiert
+- Keine Mechanik zum Entfernen "toter" Units aus der Liste
+
+**Lösung: Stabiles Timeout-System mit Auto-Cleanup**
+
+**Zwei-Stufen-Timeout-System:**
+
+1. **Online-Timeout: 15 Sekunden** (5x Heartbeat-Intervall)
+   - Unit wird als "Offline" markiert wenn 15 Sekunden kein Heartbeat
+   - Bleibt in der Liste und kann zurückkommen
+   - Verhindert Flackern bei kurzen Netzwerk-Verzögerungen
+
+2. **Removal-Timeout: 60 Sekunden** (20x Heartbeat-Intervall)
+   - Unit wird komplett aus der Liste entfernt nach 60 Sekunden
+   - ESP-NOW Peer wird ebenfalls entfernt
+   - Automatisches Cleanup von toten/abgeschalteten Units
+
+**Implementation:**
+```c
+// game_logic.c - game_get_laser_units()
+uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+size_t active_count = 0;
+
+for (size_t i = 0; i < laser_unit_count; i++) {
+    uint32_t time_since_last_seen = now - laser_units[i].last_seen;
+    
+    // Remove units offline for >60 seconds
+    if (time_since_last_seen > 60000) {
+        ESP_LOGI(TAG, "Removing inactive laser unit %d", laser_units[i].module_id);
+        espnow_remove_peer(laser_units[i].mac_address);
+        continue;  // Skip (don't copy to active list)
+    }
+    
+    // Mark offline if >15 seconds since last heartbeat
+    if (time_since_last_seen > 15000) {
+        laser_units[i].is_online = false;
+        snprintf(laser_units[i].status, "Offline");
+    } else {
+        laser_units[i].is_online = true;
+        snprintf(laser_units[i].status, "Online");
+    }
+    
+    // Compact array (remove gaps)
+    if (active_count != i) {
+        laser_units[active_count] = laser_units[i];
+    }
+    active_count++;
+}
+
+laser_unit_count = active_count;  // Update to reflect removals
+```
+
+**Code-Änderungen:**
+- `game_logic.c`: Online-Timeout von 5s auf 15s erhöht (stabiler)
+- `game_logic.c`: Removal-Timeout von 60s hinzugefügt (Auto-Cleanup)
+- `game_logic.c`: espnow_remove_peer() wird beim Entfernen aufgerufen
+- `game_logic.c`: Array-Kompaktierung um Lücken zu entfernen
+
+**Verhalten:**
+1. **0-15 Sekunden**: Unit ist "Online" (grünes Icon)
+2. **15-60 Sekunden**: Unit ist "Offline" (rotes Icon, aber noch in Liste)
+3. **>60 Sekunden**: Unit wird komplett entfernt aus Liste und Peers
+4. **Wiederverbindung**: Unit kann jederzeit durch neuen Heartbeat zurückkommen
+
+**Vorteile:**
+- ✅ Kein Flackern mehr bei minimalen Netzwerk-Verzögerungen
+- ✅ Automatisches Cleanup von abgeschalteten/defekten Units
+- ✅ ESP-NOW Peer-Liste bleibt sauber
+- ✅ Toleranz für 5 verpasste Heartbeats vor "Offline"
+- ✅ Klare visuelle Trennung zwischen temporär offline und entfernt
+
+**Ergebnis:**
+- Stabiler Online-Status ohne Flackern
+- Webinterface zeigt nur aktive/erreichbare Units
+- Automatische Bereinigung nach 1 Minute Inaktivität
+
 ---
 
 ## 🐛 Debugging
