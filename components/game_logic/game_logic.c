@@ -99,11 +99,22 @@ esp_err_t game_start(game_mode_t mode, const char *player_name)
     
     xSemaphoreGive(game_mutex);
     
-    // Broadcast MSG_GAME_START to all laser units
-    ESP_LOGI(TAG, "Broadcasting MSG_GAME_START to all laser units");
-    esp_err_t ret = espnow_broadcast_message(MSG_GAME_START, NULL, 0);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to broadcast game start: %s", esp_err_to_name(ret));
+    // Send MSG_GAME_START to all registered laser units (unicast)
+    ESP_LOGI(TAG, "Sending MSG_GAME_START to all laser units");
+    
+    // Get current laser units list
+    laser_unit_info_t units[MAX_LASER_UNITS];
+    size_t unit_count = 0;
+    game_get_laser_units(units, MAX_LASER_UNITS, &unit_count);
+    
+    for (size_t i = 0; i < unit_count; i++) {
+        esp_err_t ret = espnow_send_message(units[i].mac_addr, MSG_GAME_START, NULL, 0);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send game start to unit %d: %s", 
+                     units[i].module_id, esp_err_to_name(ret));
+        } else {
+            ESP_LOGI(TAG, "Game start sent to laser unit %d", units[i].module_id);
+        }
     }
     
     return ESP_OK;
@@ -157,16 +168,26 @@ esp_err_t game_stop(void)
     
     xSemaphoreGive(game_mutex);
     
-    // Broadcast MSG_GAME_STOP to all laser units
-    ESP_LOGI(TAG, "Broadcasting MSG_GAME_STOP to all laser units");
-    esp_err_t ret = espnow_broadcast_message(MSG_GAME_STOP, NULL, 0);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to broadcast game stop: %s", esp_err_to_name(ret));
+    // Send MSG_GAME_STOP to all registered laser units (unicast)
+    ESP_LOGI(TAG, "Sending MSG_GAME_STOP to all laser units");
+    
+    // Get current laser units list
+    laser_unit_info_t units[MAX_LASER_UNITS];
+    size_t unit_count = 0;
+    game_get_laser_units(units, MAX_LASER_UNITS, &unit_count);
+    
+    for (size_t i = 0; i < unit_count; i++) {
+        esp_err_t ret = espnow_send_message(units[i].mac_addr, MSG_GAME_STOP, NULL, 0);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send game stop to unit %d: %s", 
+                     units[i].module_id, esp_err_to_name(ret));
+        } else {
+            ESP_LOGI(TAG, "Game stop sent to laser unit %d", units[i].module_id);
+        }
     }
     
     // TODO: Save statistics to NVS
     // TODO: Display results on OLED
-    // TODO: Notify ESP-NOW peers
     
     return ESP_OK;
 }
@@ -268,6 +289,12 @@ esp_err_t game_get_player_data(player_data_t *player_data)
     }
     
     memcpy(player_data, &current_player, sizeof(player_data_t));
+    
+    // Calculate elapsed time for running games
+    if (current_state == GAME_STATE_RUNNING || current_state == GAME_STATE_PENALTY) {
+        uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+        player_data->elapsed_time = now - current_player.start_time;
+    }
     
     xSemaphoreGive(game_mutex);
     return ESP_OK;
