@@ -153,7 +153,7 @@ menu "Laser Parcour Configuration"
         config I2C_SDA_PIN
             int "I2C SDA Pin"
             range -1 21
-            default 8
+            default 19
             depends on MODULE_ROLE_CONTROL && ENABLE_DISPLAY
             help
                 GPIO pin for I2C data line (SDA).
@@ -164,7 +164,7 @@ menu "Laser Parcour Configuration"
         config I2C_SCL_PIN
             int "I2C SCL Pin"
             range -1 21
-            default 9
+            default 18
             depends on MODULE_ROLE_CONTROL && ENABLE_DISPLAY
             help
                 GPIO pin for I2C clock line (SCL).
