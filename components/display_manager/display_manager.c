@@ -222,7 +222,7 @@ esp_err_t display_text(const char *message, uint8_t line)
 /**
  * Display game results
  */
-esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks)
+esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks, completion_status_t completion)
 {
     if (!initialized) {
         return ESP_FAIL;
@@ -235,29 +235,42 @@ esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks)
     display_clear();
     
 #ifdef CONFIG_OLED_SSD1306
-    // Line 0: Title
-    ssd1306_draw_string(25, 0, "GAME COMPLETE!");
+    // Line 0: Title - show different message based on completion status
+    if (completion == COMPLETION_SOLVED) {
+        ssd1306_draw_string(20, 0, "GAME COMPLETE!");
+    } else {
+        // ABORTED_TIME or ABORTED_MANUAL
+        ssd1306_draw_string(15, 0, "GAME CANCELED!");
+    }
     
     // Line 2: Divider
     ssd1306_draw_hline(2, 0xFF);
     
-    // Line 3-4: Time (large)
+    // Line 3: Total Time label
+    ssd1306_draw_string(25, 3, "Total Time:");
+    
+    // Line 4-5: Time (large)
     char time_str[20];
     snprintf(time_str, sizeof(time_str), "%02lu:%02lu.%02lu", minutes, seconds, millis);
-    ssd1306_draw_string(10, 4, time_str);
+    ssd1306_draw_string(15, 5, time_str);
     
-    // Line 6: Breaks
+    // Line 7: Breaks
     char breaks_str[20];
     snprintf(breaks_str, sizeof(breaks_str), "Breaks: %d", beam_breaks);
-    ssd1306_draw_string(15, 6, breaks_str);
+    ssd1306_draw_string(30, 7, breaks_str);
 #elif defined(CONFIG_OLED_SH1106)
     // SH1106 implementation (TODO)
 #endif
     
     display_update();
     
+    const char* completion_str = (completion == COMPLETION_SOLVED) ? "COMPLETE" : 
+                                 (completion == COMPLETION_ABORTED_TIME) ? "CANCELED (TIME LIMIT)" :
+                                 "CANCELED (MANUAL)";
+    
     ESP_LOGI(TAG, "=== GAME RESULTS ===");
-    ESP_LOGI(TAG, "Time: %02lu:%02lu.%02lu", minutes, seconds, millis);
+    ESP_LOGI(TAG, "Status: %s", completion_str);
+    ESP_LOGI(TAG, "Total Time: %02lu:%02lu.%02lu", minutes, seconds, millis);
     ESP_LOGI(TAG, "Beam Breaks: %d", beam_breaks);
     ESP_LOGI(TAG, "====================");
     

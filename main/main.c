@@ -221,7 +221,8 @@ static void display_update_task(void *pvParameters)
                     display_set_screen(SCREEN_GAME_COMPLETE);
                     if (game_get_player_data(&player_data) == ESP_OK) {
                         display_game_results(player_data.elapsed_time,
-                                           player_data.beam_breaks);
+                                           player_data.beam_breaks,
+                                           player_data.completion);
                     }
                     complete_screen_shown = true;
                 }
@@ -343,6 +344,10 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
         case MSG_BEAM_BROKEN:
             ESP_LOGW(TAG, "Beam broken on module %d!", message->module_id);
             game_beam_broken(message->module_id);
+            break;
+        case MSG_FINISH_PRESSED:
+            ESP_LOGI(TAG, "Finish button pressed on module %d - completing game!", message->module_id);
+            game_finish();  // Successful completion via finish button
             break;
         case MSG_HEARTBEAT:
             // Ensure the laser unit is in the ESP-NOW peer list

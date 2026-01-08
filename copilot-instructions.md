@@ -233,9 +233,24 @@ esp_err_t game_set_config(const game_config_t *config)
 
 **Completion Status:**
 - COMPLETION_NONE - Spiel noch nicht beendet
-- COMPLETION_SOLVED - Via Finish-Button beendet (TODO: Button-Device)
-- COMPLETION_ABORTED_TIME - Max-Zeit überschritten
-- COMPLETION_ABORTED_MANUAL - Manuell abgebrochen
+- COMPLETION_SOLVED - Via Finish-Button beendet (erfolgreich abgeschlossen)
+- COMPLETION_ABORTED_TIME - Max-Zeit überschritten (abgebrochen/canceled)
+- COMPLETION_ABORTED_MANUAL - Manuell abgebrochen via Web-Interface (abgebrochen/canceled)
+
+**Spielende-Logik:**
+- **Erfolgreich abgeschlossen (Complete):** Nur wenn MSG_FINISH_PRESSED vom Finish-Button-Device empfangen wird
+- **Abgebrochen (Canceled):** 
+  - Bei max_time Überschreitung → COMPLETION_ABORTED_TIME
+  - Bei manuellem Stop via Web-Interface → COMPLETION_ABORTED_MANUAL
+- Display zeigt "GAME COMPLETE!" nur bei COMPLETION_SOLVED
+- Bei ABORTED_TIME/MANUAL sollte "GAME CANCELED!" angezeigt werden
+
+**Finish-Button-Device (TODO - Hardware):**
+- Neuer ESP32-Modul-Typ: FINISH
+- Sendet MSG_FINISH_PRESSED wenn Button gedrückt wird
+- Main Unit empfängt MSG und ruft game_finish() auf
+- game_finish() setzt completion = COMPLETION_SOLVED
+- Spiel wird als "successfully completed" markiert
 
 **Game Modes:**
 - GAME_MODE_SINGLE_SPEEDRUN - Einzelspieler Speedrun
@@ -456,6 +471,9 @@ esp_err_t espnow_get_peers(espnow_peer_info_t *peers, size_t max, size_t *count)
 - MSG_LASER_OFF (0x0A) - Laser ausschalten
 - MSG_SENSOR_CALIBRATE (0x0B) - Sensor kalibrieren
 - MSG_RESET (0x0C) - Modul zurücksetzen
+- MSG_CHANNEL_CHANGE (0x0D) - WiFi channel change notification
+- MSG_CHANNEL_ACK (0x0E) - Channel change acknowledgement
+- MSG_FINISH_PRESSED (0x0F) - Finish button pressed (game completed successfully)
 
 **Message Structure:**
 ```c
@@ -795,8 +813,9 @@ if (penalty_elapsed >= PENALTY_DISPLAY_TIME_MS) {  // 3000ms = 3 Sekunden
 4. Weitere Beam Breaks sind wieder möglich
 
 **Display bei GAME_STATE_COMPLETE:**
-- Zeigt "GAME COMPLETE!"
-- Gesamtzeit im Format MM:SS.ms (inklusive aller Penalties)
+- Zeigt "GAME COMPLETE!" bei COMPLETION_SOLVED (erfolgreicher Abschluss via Finish-Button)
+- Zeigt "GAME CANCELED!" bei COMPLETION_ABORTED_TIME oder COMPLETION_ABORTED_MANUAL
+- Gesamtzeit im Format MM:SS.ms (inklusive aller Penalties) mit Label "Total Time:"
 - Anzahl der Beam Breaks
 - Diese Werte bleiben dauerhaft sichtbar bis zum nächsten Spiel
 
@@ -883,6 +902,19 @@ if (penalty_elapsed >= PENALTY_DISPLAY_TIME_MS) {  // 3000ms = 3 Sekunden
 - `espnow_manager.c`: espnow_add_peer() verwendet aktuellen WiFi-Channel für neue Peers
 - `game_logic.c`: game_control_laser() sendet Unicast statt Broadcast (nur spezifische Unit)
 - `web_server.c`: Timer-Display nur bei RUNNING/PAUSED/PENALTY (nicht bei IDLE/COMPLETE)
+- `game_logic.c`: PENALTY ist nur Display-Anzeige (3 Sekunden), keine echte Spielphase
+- `game_logic.c`: Beam Breaks nur im RUNNING State akzeptiert (PENALTY blockiert)
+- `display_manager.c`: display_game_results() zeigt Gesamtzeit + Beam Breaks
+- `espnow_manager.h`: MSG_FINISH_PRESSED (0x0F) für Finish-Button-Device hinzugefügt
+- `game_logic.h`: game_finish() Funktion für erfolgreichen Abschluss via Finish-Button
+- `game_logic.c`: game_finish() implementiert - setzt COMPLETION_SOLVED
+- `game_logic.c`: game_stop() setzt COMPLETION_ABORTED_MANUAL wenn nicht bereits gesetzt
+- `main/main.c` (CONTROL): MSG_FINISH_PRESSED Handler ruft game_finish() auf
+- `display_manager.h`: display_game_results() erweitert um completion_status Parameter
+- `display_manager.c`: Zeigt "GAME COMPLETE!" (SOLVED) oder "GAME CANCELED!" (ABORTED)
+- `display_manager.c`: "Total Time:" Label hinzugefügt, prominentere Zeitanzeige
+- `display_manager/CMakeLists.txt`: game_logic als REQUIRES hinzugefügt für completion_status_t
+- `main/main.c`: display_game_results() Aufruf mit player_data.completion erweitert
 
 ### Sensor Detection Threshold
 
@@ -1389,6 +1421,107 @@ esp_err_t display_update(void) { return ESP_OK; }
 - ✅ Saubere Trennung: Interface ↔ Hardware
 - ✅ Laser Units kompilieren ohne Display-Code (Stubs)
 - ✅ Kein Dead-Code auf Laser Units
+
+---
+
+## 🏁 Finish-Button-Device (TODO - Hardware Implementation)
+
+**Zweck:** Separates ESP32-Modul mit Button zum erfolgreichen Abschließen des Spiels
+
+**Modul-Typ: FINISH**
+- Neue Modul-Rolle neben CONTROL und LASER
+- Einfaches ESP32-C3 Modul mit einem Button
+- Sendet MSG_FINISH_PRESSED via ESP-NOW an Main Unit
+
+**Hardware-Komponenten:**
+- ESP32-C3 Mikrocontroller
+- Push-Button (mit Pull-Up Widerstand)
+- Status-LED (optional)
+- Stromversorgung (5V USB oder Batterie)
+
+**Funktionsweise:**
+1. **Pairing:** Automatisches Pairing mit Main Unit beim Start (wie Laser Units)
+2. **Button-Press:** Wenn Button gedrückt wird → MSG_FINISH_PRESSED senden
+3. **Main Unit Reaktion:** 
+   - Empfängt MSG_FINISH_PRESSED
+   - Ruft game_finish() auf
+   - Setzt completion = COMPLETION_SOLVED
+   - Display zeigt "GAME COMPLETE!" (erfolg)
+   - Sendet MSG_GAME_STOP an alle Laser Units
+
+**Implementation (Finish Unit - TODO):**
+```c
+// finish_unit/main.c
+static void button_press_handler(void)
+{
+    if (is_paired && game_is_running) {
+        ESP_LOGI(TAG, "Finish button pressed - sending MSG_FINISH_PRESSED");
+        espnow_send_message(main_unit_mac, MSG_FINISH_PRESSED, NULL, 0);
+        
+        // Optional: LED-Feedback
+        gpio_set_level(FINISH_LED_PIN, 1);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        gpio_set_level(FINISH_LED_PIN, 0);
+    }
+}
+```
+
+**Main Unit Handler (IMPLEMENTIERT):**
+```c
+// main/main.c - espnow_recv_callback_main()
+case MSG_FINISH_PRESSED:
+    ESP_LOGI(TAG, "Finish button pressed on module %d - completing game!", message->module_id);
+    game_finish();  // Successful completion
+    break;
+```
+
+**Game Logic (IMPLEMENTIERT):**
+```c
+// game_logic.c
+esp_err_t game_finish(void)
+{
+    // Set completion to SOLVED
+    current_player.completion = COMPLETION_SOLVED;
+    current_state = GAME_STATE_COMPLETE;
+    
+    // Send MSG_GAME_STOP to all laser units
+    // Update statistics
+    // Log: "Game finished successfully!"
+}
+```
+
+**Display-Unterscheidung:**
+- **COMPLETION_SOLVED**: "GAME COMPLETE!" (grün/erfolgreich)
+- **COMPLETION_ABORTED_TIME**: "TIME LIMIT!" (rot/abgebrochen)
+- **COMPLETION_ABORTED_MANUAL**: "GAME CANCELED!" (gelb/abgebrochen)
+
+**Konfiguration (Kconfig.projbuild - TODO):**
+```
+choice MODULE_ROLE
+    prompt "Module Role"
+    default MODULE_ROLE_CONTROL
+    config MODULE_ROLE_CONTROL
+        bool "CONTROL (Main Unit)"
+    config MODULE_ROLE_LASER
+        bool "LASER (Laser Unit)"
+    config MODULE_ROLE_FINISH
+        bool "FINISH (Finish Button)"
+endchoice
+
+config FINISH_BUTTON_PIN
+    int "Finish Button GPIO Pin"
+    depends on MODULE_ROLE_FINISH
+    default 0
+    help
+        GPIO pin for finish button (active low with pull-up)
+```
+
+**Vorteile:**
+- ✅ Klare Unterscheidung: Erfolgreich vs. Abgebrochen
+- ✅ Physikalisches Feedback für Spieler (Button drücken = Ziel erreicht)
+- ✅ Unabhängiges Modul (kein Verkabelung zur Main Unit nötig)
+- ✅ ESP-NOW Kommunikation (wireless)
+- ✅ Einfach zu platzieren am Ziel des Parcours
 
 ---
 

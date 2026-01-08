@@ -36,7 +36,8 @@ typedef enum {
     MSG_SENSOR_CALIBRATE = 0x0B,    // Calibrate sensor
     MSG_RESET = 0x0C,               // Reset module
     MSG_CHANNEL_CHANGE = 0x0D,      // WiFi channel change notification
-    MSG_CHANNEL_ACK = 0x0E          // Channel change acknowledgement
+    MSG_CHANNEL_ACK = 0x0E,         // Channel change acknowledgement
+    MSG_FINISH_PRESSED = 0x0F       // Finish button pressed (game completed)
 } espnow_msg_type_t;
 
 /**

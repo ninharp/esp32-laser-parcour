@@ -108,7 +108,16 @@ esp_err_t game_logic_init(void);
 esp_err_t game_start(game_mode_t mode, const char *player_name);
 
 /**
- * Stop the current game
+ * Finish the current game via finish button (successful completion)
+ * Sets completion status to COMPLETION_SOLVED
+ * 
+ * @return ESP_OK on success, ESP_FAIL on error
+ */
+esp_err_t game_finish(void);
+
+/**
+ * Stop the current game (abort/cancel)
+ * Sets completion status to ABORTED_MANUAL if not already set
  * 
  * @return ESP_OK on success, ESP_FAIL on error
  */

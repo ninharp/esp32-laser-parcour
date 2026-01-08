@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include "esp_err.h"
 #include "driver/gpio.h"
+#include "game_logic.h"  // For completion_status_t
 
 #ifdef __cplusplus
 extern "C" {
@@ -96,9 +97,10 @@ esp_err_t display_text(const char *message, uint8_t line);
  * 
  * @param final_time Final time in milliseconds
  * @param beam_breaks Number of beam breaks
+ * @param completion How the game ended (SOLVED, ABORTED_TIME, ABORTED_MANUAL)
  * @return ESP_OK on success, error code otherwise
  */
-esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks);
+esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks, completion_status_t completion);
 
 /**
  * Set display contrast

@@ -128,7 +128,79 @@ esp_err_t game_start(game_mode_t mode, const char *player_name)
 }
 
 /**
- * Stop the current game
+ * Finish game via finish button (successful completion)
+ */
+esp_err_t game_finish(void)
+{
+    if (xSemaphoreTake(game_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to acquire mutex");
+        return ESP_FAIL;
+    }
+    
+    if (current_state != GAME_STATE_RUNNING && current_state != GAME_STATE_PENALTY) {
+        ESP_LOGW(TAG, "Cannot finish game - not running (state: %d)", current_state);
+        xSemaphoreGive(game_mutex);
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "Finishing game via finish button...");
+    
+    // Record end time
+    current_player.end_time = (uint32_t)(esp_timer_get_time() / 1000);
+    uint32_t raw_elapsed = current_player.end_time - current_player.start_time;
+    
+    // ADD accumulated penalty time to final elapsed time (wurde bereits bei Beam-Breaks addiert)
+    current_player.elapsed_time = raw_elapsed + total_penalty_time;
+    
+    // Set completion status to SOLVED (finished via button)
+    current_player.completion = COMPLETION_SOLVED;
+    
+    // Update statistics
+    statistics.total_games++;
+    statistics.total_beam_breaks += current_player.beam_breaks;
+    statistics.total_playtime += current_player.elapsed_time;
+    
+    if (statistics.best_time == 0 || current_player.elapsed_time < statistics.best_time) {
+        statistics.best_time = current_player.elapsed_time;
+    }
+    if (current_player.elapsed_time > statistics.worst_time) {
+        statistics.worst_time = current_player.elapsed_time;
+    }
+    statistics.avg_time = statistics.total_playtime / statistics.total_games;
+    
+    // Change state
+    current_state = GAME_STATE_COMPLETE;
+    current_player.is_active = false;
+    penalty_start_time = 0;
+    
+    ESP_LOGI(TAG, "Game finished successfully! Time: %lu ms, Breaks: %d, Completion: SOLVED",
+             current_player.elapsed_time, current_player.beam_breaks);
+    
+    xSemaphoreGive(game_mutex);
+    
+    // Send MSG_GAME_STOP to all registered laser units (unicast)
+    ESP_LOGI(TAG, "Sending MSG_GAME_STOP to all laser units");
+    
+    // Get current laser units list
+    laser_unit_info_t units[MAX_LASER_UNITS];
+    size_t unit_count = 0;
+    game_get_laser_units(units, MAX_LASER_UNITS, &unit_count);
+    
+    for (size_t i = 0; i < unit_count; i++) {
+        esp_err_t ret = espnow_send_message(units[i].mac_addr, MSG_GAME_STOP, NULL, 0);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send game stop to unit %d: %s", 
+                     units[i].module_id, esp_err_to_name(ret));
+        } else {
+            ESP_LOGI(TAG, "Game stop sent to laser unit %d", units[i].module_id);
+        }
+    }
+    
+    return ESP_OK;
+}
+
+/**
+ * Stop the current game (abort/cancel)
  */
 esp_err_t game_stop(void)
 {
