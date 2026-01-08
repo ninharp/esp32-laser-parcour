@@ -80,10 +80,19 @@ esp_err_t espnow_manager_init(uint8_t channel, espnow_recv_callback_t callback)
     recv_callback = callback;
     
     // WiFi should already be initialized by wifi_ap_manager
-    // Just ensure we're on the correct channel
-    esp_err_t ret = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    // Get the current WiFi channel instead of trying to set it
+    uint8_t current_channel = 0;
+    wifi_second_chan_t second;
+    esp_err_t ret = esp_wifi_get_channel(&current_channel, &second);
     if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to set WiFi channel: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "Failed to get WiFi channel: %s, using requested channel %d", 
+                 esp_err_to_name(ret), channel);
+        current_channel = channel;
+    } else {
+        if (current_channel != channel) {
+            ESP_LOGW(TAG, "WiFi already on channel %d, ignoring requested channel %d", 
+                     current_channel, channel);
+        }
     }
     
     // Initialize ESP-NOW
@@ -93,15 +102,15 @@ esp_err_t espnow_manager_init(uint8_t channel, espnow_recv_callback_t callback)
     ESP_ERROR_CHECK(esp_now_register_send_cb(espnow_send_cb));
     ESP_ERROR_CHECK(esp_now_register_recv_cb(espnow_recv_cb));
     
-    // Add broadcast peer
+    // Add broadcast peer with current WiFi channel
     esp_now_peer_info_t peer_info = {0};
     memcpy(peer_info.peer_addr, broadcast_mac, 6);
-    peer_info.channel = channel;
+    peer_info.channel = current_channel;
     peer_info.ifidx = WIFI_IF_STA;
     peer_info.encrypt = false;
     ESP_ERROR_CHECK(esp_now_add_peer(&peer_info));
     
-    ESP_LOGI(TAG, "ESP-NOW manager initialized successfully");
+    ESP_LOGI(TAG, "ESP-NOW manager initialized successfully on channel %d", current_channel);
     
     return ESP_OK;
 }
@@ -182,10 +191,19 @@ esp_err_t espnow_add_peer(const uint8_t *mac_addr, uint8_t module_id, uint8_t mo
         return ESP_OK;
     }
     
-    // Add peer
+    // Get current WiFi channel
+    uint8_t current_channel = 0;
+    wifi_second_chan_t second;
+    esp_err_t ret = esp_wifi_get_channel(&current_channel, &second);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get current WiFi channel: %s", esp_err_to_name(ret));
+        current_channel = CONFIG_ESPNOW_CHANNEL;  // Fallback
+    }
+    
+    // Add peer with current WiFi channel
     esp_now_peer_info_t peer_info = {0};
     memcpy(peer_info.peer_addr, mac_addr, 6);
-    peer_info.channel = CONFIG_ESPNOW_CHANNEL;
+    peer_info.channel = current_channel;
     peer_info.ifidx = WIFI_IF_STA;
     peer_info.encrypt = false;
     

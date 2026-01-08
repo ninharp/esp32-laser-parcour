@@ -728,8 +728,12 @@ CONFIG_SENSOR_LED_RED_PIN=2
 - `main/Kconfig.projbuild`: SENSOR_THRESHOLD default auf 2000, bessere Dokumentation
 - `main/main.c` (LASER): Multi-Channel Scanning in pairing_timer_callback() implementiert
 - `main/main.c` (LASER): Channel-Scan State Reset in MSG_PAIRING_RESPONSE und MSG_RESET
+- `main/main.c` (LASER): Verwendung von espnow_change_channel() für Broadcast-Peer Update
 - `wifi_ap_manager.c`: wifi_apsta_init() Funktion für korrekte APSTA-Initialisierung
 - `main/main.c` (CONTROL): Verwendung von wifi_apsta_init() für STA+AP netif Erstellung
+- `espnow_manager.c`: espnow_change_channel() aktualisiert Broadcast-Peer beim Channel-Wechsel
+- `espnow_manager.c`: espnow_manager_init() verwendet aktuellen WiFi-Channel statt konfigurierten
+- `espnow_manager.c`: espnow_add_peer() verwendet aktuellen WiFi-Channel für neue Peers
 
 ### Sensor Detection Threshold
 
