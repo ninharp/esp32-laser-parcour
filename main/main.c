@@ -444,6 +444,34 @@ static void init_main_unit(void)
     vTaskDelay(pdMS_TO_TICKS(1000));  // Wait 1 second for ESP-NOW to be fully ready
     espnow_broadcast_message(MSG_RESET, NULL, 0);
     
+    // Print GPIO configuration summary
+    ESP_LOGI(TAG, "=================================================");
+    ESP_LOGI(TAG, "   Main Unit - GPIO Configuration");
+    ESP_LOGI(TAG, "=================================================");
+#ifdef CONFIG_ENABLE_DISPLAY
+    if (CONFIG_I2C_SDA_PIN != -1 && CONFIG_I2C_SCL_PIN != -1) {
+        ESP_LOGI(TAG, "Display I2C:    SDA=GPIO%d, SCL=GPIO%d", CONFIG_I2C_SDA_PIN, CONFIG_I2C_SCL_PIN);
+    } else {
+        ESP_LOGI(TAG, "Display:        Disabled");
+    }
+#else
+    ESP_LOGI(TAG, "Display:        Disabled (menuconfig)");
+#endif
+#ifdef CONFIG_ENABLE_BUTTONS
+    ESP_LOGI(TAG, "Buttons:        B1=GPIO%d, B2=GPIO%d, B3=GPIO%d, B4=GPIO%d",
+             CONFIG_BUTTON1_PIN, CONFIG_BUTTON2_PIN, CONFIG_BUTTON3_PIN, CONFIG_BUTTON4_PIN);
+#else
+    ESP_LOGI(TAG, "Buttons:        Disabled (menuconfig)");
+#endif
+#ifdef CONFIG_ENABLE_BUZZER
+    ESP_LOGI(TAG, "Buzzer:         GPIO%d", CONFIG_BUZZER_PIN);
+#else
+    ESP_LOGI(TAG, "Buzzer:         Disabled (menuconfig)");
+#endif
+    ESP_LOGI(TAG, "WiFi Channel:   %d", CONFIG_WIFI_CHANNEL);
+    ESP_LOGI(TAG, "ESP-NOW Ch:     %d", CONFIG_ESPNOW_CHANNEL);
+    ESP_LOGI(TAG, "=================================================");
+    
     ESP_LOGI(TAG, "Main Unit initialized - ready to coordinate game");
 }
 #endif
@@ -799,6 +827,19 @@ static void init_laser_unit(void)
     // Send initial pairing request
     ESP_LOGI(TAG, "  Sending initial pairing request to main unit");
     espnow_broadcast_message(MSG_PAIRING_REQUEST, NULL, 0);
+    
+    // Print GPIO configuration summary
+    ESP_LOGI(TAG, "=================================================");
+    ESP_LOGI(TAG, "   Laser Unit - GPIO Configuration");
+    ESP_LOGI(TAG, "=================================================");
+    ESP_LOGI(TAG, "Laser Diode:    GPIO%d (PWM)", CONFIG_LASER_PIN);
+    ESP_LOGI(TAG, "Sensor ADC:     GPIO%d (Channel %d)", CONFIG_SENSOR_PIN, CONFIG_SENSOR_PIN);
+    ESP_LOGI(TAG, "Threshold:      %d (ADC units)", CONFIG_SENSOR_THRESHOLD);
+    ESP_LOGI(TAG, "Status LED:     GPIO%d", CONFIG_LASER_STATUS_LED_PIN);
+    ESP_LOGI(TAG, "Green LED:      GPIO%d", CONFIG_SENSOR_LED_GREEN_PIN);
+    ESP_LOGI(TAG, "Red LED:        GPIO%d", CONFIG_SENSOR_LED_RED_PIN);
+    ESP_LOGI(TAG, "ESP-NOW Ch:     %d (scanning)", CONFIG_ESPNOW_CHANNEL);
+    ESP_LOGI(TAG, "=================================================");
     
     ESP_LOGI(TAG, "Laser Unit initialized - ready to emit beams and detect breaks");
 }
