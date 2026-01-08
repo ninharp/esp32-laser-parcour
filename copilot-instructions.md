@@ -154,14 +154,41 @@ component_name/
 
 #### `components/display_manager/`
 **Zweck:** OLED Display (SSD1306/SH1106) Steuerung  
-**Hauptfunktionen:**
+
+**Architektur:**
+- `display_manager.c/h` - Abstraktes Interface für alle Display-Treiber
+- `ssd1306.c/h` - SSD1306-spezifischer Treiber (128x64, I2C)
+- `sh1106.c/h` - SH1106-spezifischer Treiber (TODO)
+
+**Display Manager API:**
 ```c
 esp_err_t display_manager_init(gpio_num_t sda, gpio_num_t scl, uint32_t freq)
 esp_err_t display_set_screen(display_screen_t screen)
 esp_err_t display_game_status(uint32_t time, uint16_t breaks, int32_t score)
 esp_err_t display_countdown(uint8_t seconds)
+esp_err_t display_text(const char *message, uint8_t line)
 esp_err_t display_update(void)
 ```
+
+**SSD1306 Driver API:**
+```c
+esp_err_t ssd1306_init(gpio_num_t sda, gpio_num_t scl, uint32_t freq)
+esp_err_t ssd1306_clear(void)
+esp_err_t ssd1306_update(void)
+void ssd1306_draw_string(uint8_t x, uint8_t page, const char *str)
+void ssd1306_draw_char(uint8_t x, uint8_t page, char c)
+void ssd1306_draw_large_digit(uint8_t x, uint8_t page, char digit)
+void ssd1306_draw_hline(uint8_t page, uint8_t pattern)
+esp_err_t ssd1306_set_contrast(uint8_t contrast)
+esp_err_t ssd1306_display_power(bool on)
+```
+
+**Implementation Details:**
+- **SSD1306:** 128x64 OLED, I2C 0x3C, 1024-byte framebuffer
+- **Font:** 5x7 ASCII (32-127), 6 pixels pro Zeichen mit Spacing
+- **Pages:** 8 pages (0-7), jede Page = 8 pixels hoch
+- **Large Digits:** 3x skalierte Ziffern für Countdown
+- **Driver Selection:** Basierend auf CONFIG_OLED_SSD1306 / CONFIG_OLED_SH1106
 
 **Screens:**
 - SCREEN_IDLE - Welcome Screen
@@ -1129,6 +1156,63 @@ while (1) {
 - ✅ Connected Units werden gezählt und angezeigt
 - ✅ State-abhängige Screen-Verwaltung
 - ✅ Keine manuelle Display-Aktualisierung nötig
+
+### SSD1306 OLED Driver Implementation (2025-01-08)
+
+**Architektur:** Display-Manager separiert von spezifischen Treibern
+
+**Struktur:**
+```
+display_manager/
+├── display_manager.c/h      # Abstract interface
+├── ssd1306.c/h               # SSD1306 driver (128x64)
+└── sh1106.c/h                # SH1106 driver (TODO)
+```
+
+**SSD1306 Features:**
+1. **Hardware:**
+   - 128x64 Pixel OLED
+   - I2C Interface (0x3C)
+   - 1024-byte Framebuffer (128 * 8 pages)
+   - Charge Pump für 3.3V Betrieb
+
+2. **Rendering:**
+   - 5x7 ASCII Font (Zeichen 32-127)
+   - 8 Pages (je 8 pixel hoch)
+   - 21 Zeichen pro Zeile
+   - Large Digits (3x skaliert) für Countdown
+
+3. **API-Funktionen:**
+   - `ssd1306_init()` - I2C & Display initialisieren
+   - `ssd1306_clear()` - Framebuffer leeren
+   - `ssd1306_update()` - Framebuffer zum Display senden
+   - `ssd1306_draw_string()` - Text zeichnen
+   - `ssd1306_draw_char()` - Einzelnes Zeichen
+   - `ssd1306_draw_large_digit()` - Große Ziffer (3x)
+   - `ssd1306_draw_hline()` - Horizontale Linie
+   - `ssd1306_set_contrast()` - Helligkeit (0-255)
+   - `ssd1306_display_power()` - Display ein/aus
+
+**Display Manager Delegation:**
+Der display_manager.c delegiert basierend auf CONFIG:
+```c
+#ifdef CONFIG_OLED_SSD1306
+    ssd1306_init(...);
+#elif defined(CONFIG_OLED_SH1106)
+    sh1106_init(...);
+#endif
+```
+
+**Code-Änderungen:**
+- `display_manager/ssd1306.c/h`: Neuer SSD1306-Treiber
+- `display_manager/display_manager.c`: Abstrakte Schicht, ruft Treiber-Funktionen
+- `display_manager/CMakeLists.txt`: ssd1306.c zu SRCS hinzugefügt
+
+**Vorteile:**
+- ✅ Modulare Treiber-Architektur
+- ✅ Einfach erweiterbar (SH1106, SSD1327, etc.)
+- ✅ Konfigurierbar via menuconfig
+- ✅ Saubere Trennung: Interface ↔ Hardware
 
 ---
 
