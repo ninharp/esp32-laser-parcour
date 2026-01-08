@@ -134,6 +134,9 @@ static void display_update_task(void *pvParameters)
     TickType_t last_wake_time = xTaskGetTickCount();
     const TickType_t update_interval = pdMS_TO_TICKS(100); // Update every 100ms
     
+    game_state_t last_state = GAME_STATE_IDLE;
+    bool complete_screen_shown = false;
+    
     while (1) {
         game_state_t state = game_get_state();
         player_data_t player_data;
@@ -178,8 +181,6 @@ static void display_update_task(void *pvParameters)
                 break;
                 
             case GAME_STATE_RUNNING:
-            case GAME_STATE_PENALTY:
-            case GAME_STATE_PAUSED:
                 display_set_screen(SCREEN_GAME_RUNNING);
                 if (game_get_player_data(&player_data) == ESP_OK) {
                     display_game_status(player_data.elapsed_time, 
@@ -188,18 +189,55 @@ static void display_update_task(void *pvParameters)
                 }
                 break;
                 
-            case GAME_STATE_COMPLETE:
-                display_set_screen(SCREEN_GAME_COMPLETE);
+            case GAME_STATE_PENALTY:
+                display_set_screen(SCREEN_GAME_PAUSED); // Reuse PAUSED screen for PENALTY
                 if (game_get_player_data(&player_data) == ESP_OK) {
-                    display_game_results(player_data.elapsed_time,
-                                       player_data.beam_breaks,
-                                       player_data.score);
+                    // Clear and show penalty message
+                    display_clear();
+                    display_text("*** PENALTY! ***", 0);
+                    char time_str[32];
+                    uint32_t minutes = player_data.elapsed_time / 60000;
+                    uint32_t seconds = (player_data.elapsed_time % 60000) / 1000;
+                    snprintf(time_str, sizeof(time_str), "Time: %02lu:%02lu", minutes, seconds);
+                    display_text(time_str, 3);
+                    char breaks_str[32];
+                    snprintf(breaks_str, sizeof(breaks_str), "Breaks: %d", player_data.beam_breaks);
+                    display_text(breaks_str, 5);
+                    display_update();
+                }
+                break;
+                
+            case GAME_STATE_PAUSED:
+                display_set_screen(SCREEN_GAME_PAUSED);
+                if (game_get_player_data(&player_data) == ESP_OK) {
+                    display_game_status(player_data.elapsed_time, 
+                                      player_data.beam_breaks, 
+                                      player_data.score);
+                }
+                break;
+                
+            case GAME_STATE_COMPLETE:
+                // Only display results once to avoid infinite logging
+                if (!complete_screen_shown) {
+                    display_set_screen(SCREEN_GAME_COMPLETE);
+                    if (game_get_player_data(&player_data) == ESP_OK) {
+                        display_game_results(player_data.elapsed_time,
+                                           player_data.beam_breaks,
+                                           player_data.score);
+                    }
+                    complete_screen_shown = true;
                 }
                 break;
                 
             default:
                 break;
         }
+        
+        // Reset complete screen flag when leaving COMPLETE state
+        if (last_state == GAME_STATE_COMPLETE && state != GAME_STATE_COMPLETE) {
+            complete_screen_shown = false;
+        }
+        last_state = state;
         
         // Wait for next update interval
         vTaskDelayUntil(&last_wake_time, update_interval);

@@ -132,8 +132,15 @@ esp_err_t display_game_status(uint32_t elapsed_time, uint16_t beam_breaks, int32
     display_clear();
     
 #ifdef CONFIG_OLED_SSD1306
-    // Line 0: Title
-    ssd1306_draw_string(30, 0, "GAME ACTIVE");
+    // Check if screen is set to PENALTY or PAUSED based on current_screen
+    // For now, we'll detect penalty by checking if title needs to be different
+    // Line 0: Title (will be updated by caller for PENALTY/PAUSED states)
+    if (current_screen == SCREEN_GAME_PAUSED) {
+        ssd1306_draw_string(25, 0, "*** PAUSED ***");
+    } else {
+        // Default: show "GAME ACTIVE" or let caller override
+        ssd1306_draw_string(30, 0, "GAME ACTIVE");
+    }
     
     // Line 2-3: Time (large)
     char time_str[16];
