@@ -377,7 +377,7 @@ esp_err_t game_reset_stats(void)
 }
 
 // Laser unit tracking
-#define MAX_LASER_UNITS 10
+
 static laser_unit_info_t laser_units[MAX_LASER_UNITS] = {0};
 static size_t laser_unit_count = 0;
 

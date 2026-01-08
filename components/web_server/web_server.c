@@ -179,8 +179,9 @@ static esp_err_t status_handler(httpd_req_t *req)
         case GAME_STATE_ERROR: state_str = "ERROR"; break;
     }
     
-    if (game_get_player_data(&player_data) == ESP_OK) {
-        // Calculate time remaining
+    if (game_get_player_data(&player_data) == ESP_OK && 
+        (state == GAME_STATE_RUNNING || state == GAME_STATE_PAUSED || state == GAME_STATE_PENALTY)) {
+        // Calculate time remaining only during active game states
         uint32_t elapsed = (player_data.end_time > 0) ? 
             (player_data.end_time - player_data.start_time) : 
             ((uint32_t)(esp_timer_get_time() / 1000) - player_data.start_time);
@@ -189,6 +190,11 @@ static esp_err_t status_handler(httpd_req_t *req)
         snprintf(cached_status, sizeof(cached_status),
                  "{\"state\":\"%s\",\"lives\":3,\"score\":%ld,\"time_remaining\":%lu,\"current_level\":1,\"beam_breaks\":%d}",
                  state_str, player_data.score, time_remaining, player_data.beam_breaks);
+    } else if (game_get_player_data(&player_data) == ESP_OK) {
+        // Show score but time_remaining = 0 when not running
+        snprintf(cached_status, sizeof(cached_status),
+                 "{\"state\":\"%s\",\"lives\":3,\"score\":%ld,\"time_remaining\":0,\"current_level\":1,\"beam_breaks\":%d}",
+                 state_str, player_data.score, player_data.beam_breaks);
     } else {
         snprintf(cached_status, sizeof(cached_status),
                  "{\"state\":\"%s\",\"lives\":3,\"score\":0,\"time_remaining\":0,\"current_level\":1,\"beam_breaks\":0}",

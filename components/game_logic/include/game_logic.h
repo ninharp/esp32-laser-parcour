@@ -18,6 +18,8 @@
 extern "C" {
 #endif
 
+#define MAX_LASER_UNITS 10
+
 /**
  * Game states
  */

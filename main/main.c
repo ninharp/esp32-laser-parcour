@@ -204,6 +204,10 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
             ESP_LOGW(TAG, "Beam broken on module %d!", message->module_id);
             game_beam_broken(message->module_id);
             break;
+        case MSG_HEARTBEAT:
+            ESP_LOGD(TAG, "Heartbeat from module %d", message->module_id);
+            // Update handled by game_update_laser_unit() call above
+            break;
         case MSG_STATUS_UPDATE:
             ESP_LOGD(TAG, "Status update from module %d", message->module_id);
             break;
@@ -332,6 +336,11 @@ static void init_main_unit(void)
     ESP_LOGI(TAG, "  Initializing Game Logic");
     ESP_ERROR_CHECK(game_logic_init());
     
+    // Broadcast reset to trigger re-pairing of existing laser units
+    ESP_LOGI(TAG, "  Broadcasting reset to all units for re-pairing");
+    vTaskDelay(pdMS_TO_TICKS(1000));  // Wait 1 second for ESP-NOW to be fully ready
+    espnow_broadcast_message(MSG_RESET, NULL, 0);
+    
     ESP_LOGI(TAG, "Main Unit initialized - ready to coordinate game");
 }
 #endif
@@ -340,6 +349,7 @@ static void init_main_unit(void)
 // Pairing state
 static bool is_paired = false;
 static esp_timer_handle_t pairing_timer = NULL;
+static esp_timer_handle_t heartbeat_timer = NULL;
 
 // Channel scanning state
 static uint8_t current_scan_channel = CONFIG_ESPNOW_CHANNEL;
@@ -347,6 +357,21 @@ static uint8_t scan_attempts_on_channel = 0;
 static const uint8_t MAX_ATTEMPTS_PER_CHANNEL = 3;  // 3 pairing attempts per channel
 static const uint8_t MAX_WIFI_CHANNEL = 13;          // WiFi channels 1-13
 static uint8_t led_blink_state = 0;                  // For blinking status LED during scanning
+
+/**
+ * Heartbeat timer callback (Laser Unit)
+ * Sends periodic heartbeat to keep online status
+ */
+static void heartbeat_timer_callback(void *arg)
+{
+    if (is_paired) {
+        // Send heartbeat message to main unit
+        esp_err_t ret = espnow_broadcast_message(MSG_HEARTBEAT, NULL, 0);
+        ESP_LOGI(TAG, "Heartbeat sent: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGW(TAG, "Heartbeat timer fired but not paired!");
+    }
+}
 
 /**
  * Pairing request timer callback with channel scanning
@@ -477,10 +502,25 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             is_paired = true;
             scan_attempts_on_channel = 0;  // Reset scan state
             led_blink_state = 0;           // Reset blink state
+            
+            // Stop pairing timer
             if (pairing_timer) {
-                esp_timer_stop(pairing_timer);
-                ESP_LOGI(TAG, "Pairing timer stopped");
+                esp_err_t ret = esp_timer_stop(pairing_timer);
+                ESP_LOGI(TAG, "Pairing timer stopped: %s", esp_err_to_name(ret));
             }
+            
+            // Start heartbeat timer (3 seconds)
+            if (heartbeat_timer) {
+                if (!esp_timer_is_active(heartbeat_timer)) {
+                    esp_err_t ret = esp_timer_start_periodic(heartbeat_timer, 3000000);  // 3 seconds
+                    ESP_LOGI(TAG, "Heartbeat timer started: %s", esp_err_to_name(ret));
+                } else {
+                    ESP_LOGI(TAG, "Heartbeat timer already active");
+                }
+            } else {
+                ESP_LOGE(TAG, "Heartbeat timer is NULL!");
+            }
+            
             gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);  // Status LED on solid when paired
             break;
         case MSG_RESET:
@@ -495,6 +535,12 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             
             // Reset pairing state
             is_paired = false;
+            
+            // Stop heartbeat timer
+            if (heartbeat_timer && esp_timer_is_active(heartbeat_timer)) {
+                esp_timer_stop(heartbeat_timer);
+                ESP_LOGI(TAG, "Heartbeat timer stopped");
+            }
             
             // Reset channel scan state
             current_scan_channel = CONFIG_ESPNOW_CHANNEL;  // Back to configured start channel
@@ -573,6 +619,14 @@ static void init_laser_unit(void)
     };
     ESP_ERROR_CHECK(esp_timer_create(&pairing_timer_args, &pairing_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(pairing_timer, 5000000));  // 5 seconds in microseconds
+    
+    // Set up heartbeat timer (starts after successful pairing)
+    ESP_LOGI(TAG, "  Setting up heartbeat timer");
+    const esp_timer_create_args_t heartbeat_timer_args = {
+        .callback = &heartbeat_timer_callback,
+        .name = "heartbeat_timer"
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&heartbeat_timer_args, &heartbeat_timer));
     
     // Send initial pairing request
     ESP_LOGI(TAG, "  Sending initial pairing request to main unit");
