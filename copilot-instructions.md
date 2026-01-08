@@ -925,6 +925,71 @@ esp_err_t find_main_unit_channel(uint8_t *channel)
 - Im Game-Modus: Live-Feedback über Beam-Status
 - Im manuellen Modus: Beide LEDs = visuelles Feedback für Laser ON
 
+### WiFi Auto-Connect Race Condition (2025-01-08)
+
+**Problem:** ESP32 crasht beim Start mit `ESP_ERR_WIFI_CONN` in `wifi_connect_sta()`
+
+**Symptome:**
+```
+I (762) wifi:connected with ninIOT, aid = 32, channel 6, BW20, bssid = 78:45:58:27:21:e4
+ESP_ERROR_CHECK failed: esp_err_t 0x3007 (ESP_ERR_WIFI_CONN) at 0x420118bc
+file: "./components/wifi_ap_manager/wifi_ap_manager.c" line 475
+func: wifi_connect_sta
+expression: esp_wifi_connect()
+abort() was called at PC 0x40388d37 on core 0
+```
+
+**Ursache:**
+- WiFi hatte gespeicherte Credentials im NVS (z.B. "ninIOT")
+- Bei `esp_wifi_start()` verbindet sich WiFi **automatisch** mit gespeichertem Netzwerk
+- Code versuchte dann `esp_wifi_connect()` aufzurufen → **ESP_ERR_WIFI_CONN** (already connecting)
+- `ESP_ERROR_CHECK()` führte zu Abort
+
+**Lösung: Intelligente Verbindungsprüfung**
+
+Vor `esp_wifi_connect()` prüfen ob WiFi bereits verbunden/connecting ist:
+
+```c
+// wifi_ap_manager.c - wifi_connect_sta()
+if (!is_initialized) {
+    ESP_ERROR_CHECK(esp_wifi_start());
+    is_initialized = true;
+} else {
+    // Check if already connected or connecting
+    wifi_ap_record_t ap_info;
+    esp_err_t check = esp_wifi_sta_get_ap_info(&ap_info);
+    
+    if (check == ESP_OK) {
+        // Already connected, no need to call esp_wifi_connect()
+        ESP_LOGI(TAG, "WiFi already connected to: %s", ap_info.ssid);
+    } else if (check == ESP_ERR_WIFI_NOT_CONNECT) {
+        // Not connected, safe to call connect
+        esp_err_t connect_ret = esp_wifi_connect();
+        if (connect_ret != ESP_OK && connect_ret != ESP_ERR_WIFI_CONN) {
+            ESP_ERROR_CHECK(connect_ret);
+        } else if (connect_ret == ESP_ERR_WIFI_CONN) {
+            ESP_LOGI(TAG, "WiFi already connecting, waiting for result...");
+        }
+    }
+}
+```
+
+**Code-Änderungen:**
+- `wifi_ap_manager.c`: wifi_connect_sta() prüft vor connect ob bereits verbunden
+- `wifi_ap_manager.c`: ESP_ERR_WIFI_CONN wird als gültig behandelt (already connecting)
+- `wifi_ap_manager.c`: Verhindert doppelten esp_wifi_connect() Aufruf
+
+**Verhalten:**
+1. **WiFi nicht verbunden**: `esp_wifi_connect()` wird aufgerufen
+2. **WiFi bereits verbunden**: Überspringt connect, nutzt bestehende Verbindung
+3. **WiFi connecting**: Akzeptiert ESP_ERR_WIFI_CONN, wartet auf Event
+4. **Kein Crash mehr** bei automatischer WiFi-Verbindung
+
+**Ergebnis:**
+- Main Unit startet erfolgreich auch mit gespeicherten WiFi-Credentials
+- Automatische Verbindung zu bekannten Netzwerken funktioniert
+- Fallback zu AP-Modus bei Verbindungsfehlern bleibt erhalten
+
 ---
 
 ## 🐛 Debugging

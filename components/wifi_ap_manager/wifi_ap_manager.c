@@ -472,7 +472,25 @@ esp_err_t wifi_connect_sta(const char *ssid, const char *password, bool save_to_
         ESP_ERROR_CHECK(esp_wifi_start());
         is_initialized = true;
     } else {
-        ESP_ERROR_CHECK(esp_wifi_connect());
+        // Check if already connected or connecting
+        wifi_ap_record_t ap_info;
+        esp_err_t check = esp_wifi_sta_get_ap_info(&ap_info);
+        
+        if (check == ESP_OK) {
+            // Already connected, no need to call esp_wifi_connect()
+            ESP_LOGI(TAG, "WiFi already connected to: %s", ap_info.ssid);
+        } else if (check == ESP_ERR_WIFI_NOT_CONNECT) {
+            // Not connected, safe to call connect
+            esp_err_t connect_ret = esp_wifi_connect();
+            if (connect_ret != ESP_OK && connect_ret != ESP_ERR_WIFI_CONN) {
+                // ESP_ERR_WIFI_CONN means already connecting, which is OK
+                ESP_ERROR_CHECK(connect_ret);
+            } else if (connect_ret == ESP_ERR_WIFI_CONN) {
+                ESP_LOGI(TAG, "WiFi already connecting, waiting for result...");
+            }
+        } else {
+            ESP_LOGW(TAG, "esp_wifi_sta_get_ap_info returned: %s", esp_err_to_name(check));
+        }
     }
     
     // Wait for connection
