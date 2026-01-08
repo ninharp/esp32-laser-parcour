@@ -602,10 +602,46 @@ void app_main(void)
     
     // Main loop
     while (1) {
-        // TODO: Implement main logic based on module role
-        // For now, just report status every 5 seconds
+#ifdef CONFIG_MODULE_ROLE_CONTROL
+        // Get connected laser units count
+        laser_unit_info_t units[MAX_LASER_UNITS];
+        size_t unit_count = 0;
+        game_get_laser_units(units, MAX_LASER_UNITS, &unit_count);
+        
+        // Count online units
+        size_t online_count = 0;
+        for (size_t i = 0; i < unit_count; i++) {
+            if (units[i].is_online) {
+                online_count++;
+            }
+        }
+        
+        // Build connected units string
+        char units_str[128] = {0};
+        if (online_count > 0) {
+            char *p = units_str;
+            p += snprintf(p, sizeof(units_str), " | Connected units: %d [", online_count);
+            bool first = true;
+            for (size_t i = 0; i < unit_count; i++) {
+                if (units[i].is_online) {
+                    if (!first) {
+                        p += snprintf(p, sizeof(units_str) - (p - units_str), ", ");
+                    }
+                    p += snprintf(p, sizeof(units_str) - (p - units_str), "%d", units[i].module_id);
+                    first = false;
+                }
+            }
+            snprintf(p, sizeof(units_str) - (p - units_str), "]");
+        } else {
+            snprintf(units_str, sizeof(units_str), " | No units connected");
+        }
+        
+        ESP_LOGI(TAG, "Status: Running (%s Module ID:%d) - Free heap: %ld bytes%s",
+                 MODULE_ROLE, CONFIG_MODULE_ID, esp_get_free_heap_size(), units_str);
+#else
         ESP_LOGI(TAG, "Status: Running (%s Module ID:%d) - Free heap: %ld bytes",
                  MODULE_ROLE, CONFIG_MODULE_ID, esp_get_free_heap_size());
+#endif
         
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
