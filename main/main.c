@@ -605,8 +605,17 @@ static void beam_break_callback(uint8_t sensor_id)
     gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 1);
     gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
     
-    // Broadcast beam break to main unit
-    espnow_broadcast_message(MSG_BEAM_BROKEN, &sensor_id, sizeof(sensor_id));
+    // Send beam break to main unit (unicast)
+    if (is_paired) {
+        esp_err_t ret = espnow_send_message(main_unit_mac, MSG_BEAM_BROKEN, &sensor_id, sizeof(sensor_id));
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send beam break: %s", esp_err_to_name(ret));
+        } else {
+            ESP_LOGI(TAG, "Beam break sent to main unit");
+        }
+    } else {
+        ESP_LOGW(TAG, "Not paired, cannot send beam break");
+    }
 }
 
 /**
