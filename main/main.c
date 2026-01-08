@@ -876,6 +876,7 @@ static void init_laser_unit(void)
  */
 void app_main(void)
 {
+    esp_log_level_set("SSD1306", ESP_LOG_DEBUG);  // Enable debug logs for SSD1306 driver
     // Print system information
     print_system_info();
     

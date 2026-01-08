@@ -187,9 +187,27 @@ static esp_err_t i2c_scan_device(uint8_t addr)
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, true);
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(50));
+    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(100));  // Increased timeout
     i2c_cmd_link_delete(cmd);
     return ret;
+}
+
+/**
+ * Test if I2C communication works at all
+ */
+static void i2c_test_pins(gpio_num_t sda_pin, gpio_num_t scl_pin)
+{
+    ESP_LOGI(TAG, "Testing I2C configuration:");
+    ESP_LOGI(TAG, "  SDA Pin: GPIO%d", sda_pin);
+    ESP_LOGI(TAG, "  SCL Pin: GPIO%d", scl_pin);
+    ESP_LOGI(TAG, "  Frequency: 100kHz");
+    ESP_LOGI(TAG, "  Pull-ups: Enabled (internal)");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "If scan fails, try:");
+    ESP_LOGI(TAG, "  1. Swap SDA/SCL pins");
+    ESP_LOGI(TAG, "  2. Add external 4.7k pull-up resistors");
+    ESP_LOGI(TAG, "  3. Check display power (3.3V)");
+    ESP_LOGI(TAG, "  4. Try lower I2C speed (10kHz)");
 }
 
 /**
@@ -224,37 +242,59 @@ esp_err_t ssd1306_init(gpio_num_t sda_pin, gpio_num_t scl_pin, uint32_t freq_hz)
     ESP_LOGI(TAG, "I2C driver installed, scanning for display...");
     
     // Wait for display to power up
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(200));
+    
+    // Show I2C configuration for debugging
+    i2c_test_pins(sda_pin, scl_pin);
     
     // Try common OLED display addresses (0x3C and 0x3D)
     uint8_t display_addr = 0;
+    ESP_LOGI(TAG, "Trying display address 0x3C...");
     if (i2c_scan_device(0x3C) == ESP_OK) {
         display_addr = 0x3C;
         ESP_LOGI(TAG, "✓ Display found at address 0x3C");
-    } else if (i2c_scan_device(0x3D) == ESP_OK) {
-        display_addr = 0x3D;
-        ESP_LOGI(TAG, "✓ Display found at address 0x3D");
-        ESP_LOGW(TAG, "Note: Address 0x3D detected. This might be a SH1106 display!");
     } else {
-        ESP_LOGE(TAG, "✗ Display NOT found at 0x3C or 0x3D");
-        ESP_LOGE(TAG, "Check wiring: SDA=%d, SCL=%d", sda_pin, scl_pin);
-        
-        // Scan entire I2C bus to find devices
-        ESP_LOGI(TAG, "Scanning I2C bus (0x01-0x7E)...");
-        bool found_any = false;
-        for (uint8_t addr = 1; addr < 127; addr++) {
-            if (i2c_scan_device(addr) == ESP_OK) {
-                ESP_LOGI(TAG, "  Found I2C device at address 0x%02X", addr);
-                found_any = true;
+        ESP_LOGI(TAG, "Trying display address 0x3D...");
+        if (i2c_scan_device(0x3D) == ESP_OK) {
+            display_addr = 0x3D;
+            ESP_LOGI(TAG, "✓ Display found at address 0x3D");
+            ESP_LOGW(TAG, "Note: Address 0x3D detected. This might be a SH1106 display!");
+        } else {
+            ESP_LOGE(TAG, "✗ Display NOT found at 0x3C or 0x3D");
+            
+            // Full I2C bus scan with detailed output
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "=== Full I2C Bus Scan ===");
+            bool found_any = false;
+            for (uint8_t addr = 0x01; addr < 0x7F; addr++) {
+                esp_err_t ret = i2c_scan_device(addr);
+                if (ret == ESP_OK) {
+                    ESP_LOGI(TAG, "  ✓ Device found at 0x%02X", addr);
+                    found_any = true;
+                } else if (addr % 16 == 0) {
+                    // Progress indicator
+                    ESP_LOGD(TAG, "  Scanning 0x%02X...", addr);
+                }
             }
+            ESP_LOGI(TAG, "=========================");
+            ESP_LOGI(TAG, "");
+            
+            if (!found_any) {
+                ESP_LOGE(TAG, "❌ NO I2C devices found on bus!");
+                ESP_LOGE(TAG, "");
+                ESP_LOGE(TAG, "Possible issues:");
+                ESP_LOGE(TAG, "  1. SDA/SCL pins swapped (try: SDA=18, SCL=19)");
+                ESP_LOGE(TAG, "  2. Missing pull-up resistors (add 4.7kΩ)");
+                ESP_LOGE(TAG, "  3. Display not powered (check 3.3V)");
+                ESP_LOGE(TAG, "  4. Loose wiring/bad connections");
+            } else {
+                ESP_LOGW(TAG, "Found I2C device(s) but not at expected OLED addresses");
+            }
+            
+            // Don't fail - allow system to continue without display
+            ESP_LOGW(TAG, "Continuing without display...");
+            return ESP_FAIL;
         }
-        if (!found_any) {
-            ESP_LOGW(TAG, "  No I2C devices found on bus");
-        }
-        
-        // Don't fail - allow system to continue without display
-        ESP_LOGW(TAG, "Continuing without display...");
-        return ESP_FAIL;
     }
     
     // Update I2C address if different from default
@@ -265,13 +305,13 @@ esp_err_t ssd1306_init(gpio_num_t sda_pin, gpio_num_t scl_pin, uint32_t freq_hz)
         // For now, we'll try to continue with detection
     }
     
-    // Init sequence for 128x64 OLED module
-    ESP_LOGI(TAG, "Sending initialization sequence...");
+    // Init sequence for 128x32 OLED module
+    ESP_LOGI(TAG, "Sending initialization sequence for 128x32 display...");
     write_command(SSD1306_CMD_DISPLAY_OFF);
     write_command(SSD1306_CMD_SET_DISPLAY_CLK_DIV);
     write_command(0x80);
     write_command(SSD1306_CMD_SET_MULTIPLEX);
-    write_command(0x3F); // 64 lines
+    write_command(0x1F); // 32 lines
     write_command(SSD1306_CMD_SET_DISPLAY_OFFSET);
     write_command(0x00);
     write_command(SSD1306_CMD_SET_START_LINE | 0x00);
@@ -282,7 +322,7 @@ esp_err_t ssd1306_init(gpio_num_t sda_pin, gpio_num_t scl_pin, uint32_t freq_hz)
     write_command(SSD1306_CMD_SEG_REMAP | 0x01);
     write_command(SSD1306_CMD_COM_SCAN_DEC);
     write_command(SSD1306_CMD_SET_COM_PINS);
-    write_command(0x12);
+    write_command(0x02); // Sequential COM pin config for 32px
     write_command(SSD1306_CMD_SET_CONTRAST);
     write_command(0xCF);
     write_command(SSD1306_CMD_SET_PRECHARGE);
@@ -299,7 +339,7 @@ esp_err_t ssd1306_init(gpio_num_t sda_pin, gpio_num_t scl_pin, uint32_t freq_hz)
     
     initialized = true;
     
-    ESP_LOGI(TAG, "SSD1306 initialized successfully (128x64)");
+    ESP_LOGI(TAG, "SSD1306 initialized successfully (128x32, 4 pages)");
     
     return ESP_OK;
 }
