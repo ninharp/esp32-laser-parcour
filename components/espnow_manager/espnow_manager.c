@@ -260,13 +260,34 @@ esp_err_t espnow_change_channel(uint8_t new_channel)
     
     ESP_LOGI(TAG, "Changing WiFi/ESP-NOW channel to %d", new_channel);
     
-    esp_err_t ret = esp_wifi_set_channel(new_channel, WIFI_SECOND_CHAN_NONE);
+    // Remove old broadcast peer
+    esp_err_t ret = esp_now_del_peer(broadcast_mac);
+    if (ret != ESP_OK && ret != ESP_ERR_ESPNOW_NOT_FOUND) {
+        ESP_LOGW(TAG, "Failed to remove broadcast peer: %s", esp_err_to_name(ret));
+    }
+    
+    // Change WiFi channel
+    ret = esp_wifi_set_channel(new_channel, WIFI_SECOND_CHAN_NONE);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to change channel: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to change WiFi channel: %s", esp_err_to_name(ret));
         return ret;
     }
     
-    ESP_LOGI(TAG, "Channel changed successfully to %d", new_channel);
+    // Add broadcast peer on new channel
+    esp_now_peer_info_t peer_info = {0};
+    memcpy(peer_info.peer_addr, broadcast_mac, 6);
+    peer_info.channel = new_channel;
+    peer_info.ifidx = WIFI_IF_STA;
+    peer_info.encrypt = false;
+    
+    ret = esp_now_add_peer(&peer_info);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to add broadcast peer on channel %d: %s", 
+                 new_channel, esp_err_to_name(ret));
+        return ret;
+    }
+    
+    ESP_LOGI(TAG, "Channel changed successfully to %d, broadcast peer updated", new_channel);
     return ESP_OK;
 }
 

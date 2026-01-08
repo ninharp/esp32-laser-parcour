@@ -372,7 +372,7 @@ static void pairing_timer_callback(void *arg)
             
             // Switch channel
             ESP_LOGI(TAG, "No response, switching to channel %d", current_scan_channel);
-            esp_err_t ret = esp_wifi_set_channel(current_scan_channel, WIFI_SECOND_CHAN_NONE);
+            esp_err_t ret = espnow_change_channel(current_scan_channel);
             if (ret != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to switch channel: %s", esp_err_to_name(ret));
             }
