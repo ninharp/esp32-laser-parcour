@@ -624,7 +624,8 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             ESP_LOGI(TAG, "Game start command received");
             is_game_mode = true;  // Enter game mode
             laser_turn_on(100);  // Turn laser on at full intensity
-            // Status LED stays on (connected)
+            // Turn off status LED during game (status visible via green/red LEDs)
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
             // Initialize game LEDs: green on (beam OK), red off
             gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 1);
             gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
@@ -639,7 +640,8 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             sensor_stop_monitoring();
             ESP_LOGI(TAG, "Sensor monitoring stopped");
             laser_turn_off();
-            // Status LED stays on (connected)
+            // Turn status LED back on (connected state)
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);
             // Turn off game LEDs
             gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
             gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
