@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width,initial-scale=1'>
+    <title>Laser Parcour Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #666;
+            margin-top: 30px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: 0.3s;
+        }
+        .btn-start {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-start:hover {
+            background: #45a049;
+        }
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+        .btn-stop:hover {
+            background: #da190b;
+        }
+        .btn-pause {
+            background: #ff9800;
+            color: white;
+        }
+        .btn-pause:hover {
+            background: #e68900;
+        }
+        .btn-scan {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-scan:hover {
+            background: #0b7dda;
+        }
+        .status {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+        }
+        .wifi-list {
+            list-style: none;
+            padding: 0;
+        }
+        .wifi-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f9f9f9;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .wifi-item:hover {
+            background: #e9e9e9;
+        }
+        .signal {
+            font-size: 12px;
+            color: #666;
+        }
+        .input-group {
+            margin: 10px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>🎯 Laser Parcour Control</h1>
+        <div class='status' id='status'>Loading status...</div>
+        <div style='text-align:center;margin:20px 0'>
+            <button id='game-toggle-btn' class='btn btn-start' onclick='toggleGame()'>▶️ Start Game</button>
+        </div>
+        <h2>🎯 Laser Units</h2>
+        <ul class='wifi-list' id='units-list'>Loading...</ul>
+        <h2>📡 WiFi Configuration</h2>
+        <div class='status' id='wifi-status'>Checking WiFi status...</div>
+        <button class='btn btn-scan' onclick='scanWiFi()'>🔍 Scan Networks</button>
+        <button class='btn btn-stop' onclick='disconnectWiFi()'>❌ Disconnect</button>
+        <ul class='wifi-list' id='wifi-list'></ul>
+        <div id='connect-form' class='hidden'>
+            <h3>Connect to Network</h3>
+            <div class='input-group'>
+                <label>SSID:</label>
+                <input type='text' id='connect-ssid' readonly>
+            </div>
+            <div class='input-group'>
+                <label>Password:</label>
+                <input type='password' id='connect-password'>
+            </div>
+            <button class='btn btn-start' onclick='connectWiFi()'>Connect</button>
+            <button class='btn btn-stop' onclick='cancelConnect()'>Cancel</button>
+        </div>
+    </div>
+    
+    <script>
+        let currentState = 'IDLE';
+        
+        function updateStatus() {
+            fetch('/api/status').then(r => r.json()).then(d => {
+                currentState = d.state;
+                document.getElementById('status').innerHTML = `State: ${d.state}<br>Time: ${d.time_remaining}s<br>Beam Breaks: ${d.beam_breaks || 0}`;
+                let btn = document.getElementById('game-toggle-btn');
+                if (d.state === 'IDLE' || d.state === 'COMPLETE' || d.state === 'ERROR') {
+                    btn.innerHTML = '▶️ Start Game';
+                    btn.className = 'btn btn-start';
+                } else {
+                    btn.innerHTML = '⏹️ Stop Game';
+                    btn.className = 'btn btn-stop';
+                }
+            }).catch(e => console.error(e));
+        }
+        
+        function toggleGame() {
+            if (currentState === 'IDLE' || currentState === 'COMPLETE' || currentState === 'ERROR') {
+                control('start');
+            } else {
+                control('stop');
+            }
+        }
+        
+        function updateWiFiStatus() {
+            fetch('/api/wifi/status').then(r => r.json()).then(d => {
+                let status = 'Status: ' + d.status;
+                if (d.connected) {
+                    status += `<br>SSID: ${d.ssid}<br>IP: ${d.ip}`;
+                }
+                document.getElementById('wifi-status').innerHTML = status;
+            }).catch(e => console.error(e));
+        }
+        
+        function control(cmd) {
+            fetch('/api/game/' + cmd, {method: 'POST'}).then(r => r.json()).then(d => {
+                updateStatus();
+            }).catch(e => console.error('Control error:', e));
+        }
+        
+        function scanWiFi() {
+            document.getElementById('wifi-list').innerHTML = '<li>Scanning...</li>';
+            fetch('/api/wifi/scan').then(r => r.json()).then(d => {
+                let html = '';
+                d.networks.forEach(n => {
+                    let signal = '📶'.repeat(Math.ceil((n.rssi + 100) / 25));
+                    let lock = n.authmode > 0 ? '🔒' : '';
+                    html += `<li class='wifi-item' onclick='selectNetwork("${n.ssid}")'><span>${lock} ${n.ssid}</span><span class='signal'>${signal} ${n.rssi}dBm</span></li>`;
+                });
+                document.getElementById('wifi-list').innerHTML = html;
+            }).catch(e => {
+                alert('Scan failed');
+                console.error(e);
+            });
+        }
+        
+        function selectNetwork(ssid) {
+            document.getElementById('connect-ssid').value = ssid;
+            document.getElementById('connect-password').value = '';
+            document.getElementById('connect-form').classList.remove('hidden');
+            document.getElementById('connect-password').focus();
+        }
+        
+        function cancelConnect() {
+            document.getElementById('connect-form').classList.add('hidden');
+        }
+        
+        function connectWiFi() {
+            let ssid = document.getElementById('connect-ssid').value;
+            let password = document.getElementById('connect-password').value;
+            fetch('/api/wifi/connect', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ssid: ssid, password: password, save: true})
+            }).then(r => r.json()).then(d => {
+                alert(d.message || 'Connected');
+                cancelConnect();
+                updateWiFiStatus();
+            }).catch(e => alert('Connection failed'));
+        }
+        
+        function disconnectWiFi() {
+            if (!confirm('Disconnect from WiFi?')) return;
+            fetch('/api/wifi/disconnect', {method: 'POST'}).then(r => r.json()).then(d => {
+                alert('Disconnected');
+                updateWiFiStatus();
+            }).catch(e => alert('Error'));
+        }
+        
+        function updateUnits() {
+            fetch('/api/units').then(r => r.json()).then(d => {
+                let html = '';
+                if (d.count === 0) {
+                    html = '<li>No laser units detected</li>';
+                } else {
+                    d.units.forEach(u => {
+                        let status = u.online ? '🟢 Online' : '🔴 Offline';
+                        let laser = u.laser_on ? '🔴 ON' : '⚫ OFF';
+                        html += `<li class='wifi-item'><div><strong>Unit ${u.id}</strong> ${status}<br>MAC: ${u.mac} | Laser: ${laser}<br>RSSI: ${u.rssi}dBm | ${u.status}</div>`;
+                        html += `<div><button class='btn ${u.laser_on ? "btn-stop" : "btn-start"}' onclick='controlUnit(${u.id},"${u.laser_on ? "laser_off" : "laser_on"}")'>${u.laser_on ? "OFF" : "ON"}</button>`;
+                        html += `<button class='btn btn-pause' onclick='controlUnit(${u.id},"reset")'>Reset</button></div></li>`;
+                    });
+                }
+                document.getElementById('units-list').innerHTML = html;
+            }).catch(e => console.error(e));
+        }
+        
+        function controlUnit(id, action) {
+            let payload = {id: id, action: action};
+            if (action === 'laser_on') payload.intensity = 100;
+            fetch('/api/units/control', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            }).then(r => r.json()).then(d => {
+                updateUnits();
+            }).catch(e => alert('Control failed'));
+        }
+        
+        // Update intervals
+        setInterval(updateStatus, 2000);
+        setInterval(updateWiFiStatus, 5000);
+        setInterval(updateUnits, 3000);
+        
+        // Initial load
+        updateStatus();
+        updateWiFiStatus();
+        updateUnits();
+    </script>
+</body>
+</html>
