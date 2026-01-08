@@ -483,6 +483,7 @@ static bool is_game_mode = false;  // Track if in game mode (vs manual laser con
 static esp_timer_handle_t pairing_timer = NULL;
 static esp_timer_handle_t heartbeat_timer = NULL;
 static esp_timer_handle_t led_blink_timer = NULL;
+static uint8_t main_unit_mac[6] = {0};  // MAC address of paired main unit
 
 // Channel scanning state
 static uint8_t current_scan_channel = CONFIG_ESPNOW_CHANNEL;
@@ -511,9 +512,9 @@ static void led_blink_timer_callback(void *arg)
 static void heartbeat_timer_callback(void *arg)
 {
     if (is_paired) {
-        // Send heartbeat message to main unit
-        esp_err_t ret = espnow_broadcast_message(MSG_HEARTBEAT, NULL, 0);
-        ESP_LOGI(TAG, "Heartbeat sent: %s", esp_err_to_name(ret));
+        // Send heartbeat message as unicast to main unit
+        esp_err_t ret = espnow_send_message(main_unit_mac, MSG_HEARTBEAT, NULL, 0);
+        ESP_LOGI(TAG, "Heartbeat sent to main unit: %s", esp_err_to_name(ret));
     } else {
         ESP_LOGW(TAG, "Heartbeat timer fired but not paired!");
     }
@@ -669,6 +670,23 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             break;
         case MSG_PAIRING_RESPONSE:
             ESP_LOGI(TAG, "Pairing response received - paired successfully on channel %d!", current_scan_channel);
+            
+            // Store main unit MAC address for unicast heartbeats
+            memcpy(main_unit_mac, sender_mac, 6);
+            ESP_LOGI(TAG, "Main unit MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+                     main_unit_mac[0], main_unit_mac[1], main_unit_mac[2],
+                     main_unit_mac[3], main_unit_mac[4], main_unit_mac[5]);
+            
+            // Add main unit as peer for unicast communication
+            esp_err_t peer_ret = espnow_add_peer(main_unit_mac, 0, 0); // module_id=0, role=0 for main
+            if (peer_ret == ESP_OK) {
+                ESP_LOGI(TAG, "Main unit added as peer");
+            } else if (peer_ret == ESP_ERR_ESPNOW_EXIST) {
+                ESP_LOGD(TAG, "Main unit peer already exists");
+            } else {
+                ESP_LOGE(TAG, "Failed to add main unit as peer: %s", esp_err_to_name(peer_ret));
+            }
+            
             is_paired = true;
             scan_attempts_on_channel = 0;  // Reset scan state
             led_blink_state = 0;           // Reset blink state
