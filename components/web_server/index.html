@@ -242,9 +242,24 @@
                     d.units.forEach(u => {
                         let status = u.online ? '🟢 Online' : '🔴 Offline';
                         let laser = u.laser_on ? '🔴 ON' : '⚫ OFF';
-                        html += `<li class='wifi-item'><div><strong>Unit ${u.id}</strong> ${status}<br>MAC: ${u.mac} | Laser: ${laser}<br>RSSI: ${u.rssi}dBm | ${u.status}</div>`;
-                        html += `<div><button class='btn ${u.laser_on ? "btn-stop" : "btn-start"}' onclick='controlUnit(${u.id},"${u.laser_on ? "laser_off" : "laser_on"}")'>${u.laser_on ? "OFF" : "ON"}</button>`;
-                        html += `<button class='btn btn-pause' onclick='controlUnit(${u.id},"reset")'>Reset</button></div></li>`;
+                        let isFinish = u.role === 2;  // role 2 = finish button
+                        let unitType = isFinish ? '🏁 Finish Button' : 'Laser Unit';
+                        let unitStyle = isFinish ? 'style="border-left: 4px solid #4CAF50;"' : '';
+                        
+                        html += `<li class='wifi-item' ${unitStyle}><div><strong>${unitType} ${u.id}</strong> ${status}<br>MAC: ${u.mac}`;
+                        if (!isFinish) {
+                            html += ` | Laser: ${laser}`;
+                        }
+                        html += `<br>RSSI: ${u.rssi}dBm | ${u.status}</div>`;
+                        
+                        // Show controls only for laser units (not finish button)
+                        if (!isFinish) {
+                            html += `<div><button class='btn ${u.laser_on ? "btn-stop" : "btn-start"}' onclick='controlUnit(${u.id},"${u.laser_on ? "laser_off" : "laser_on"}")'>${u.laser_on ? "OFF" : "ON"}</button>`;
+                            html += `<button class='btn btn-pause' onclick='controlUnit(${u.id},"reset")'>Reset</button></div>`;
+                        } else {
+                            html += `<div><button class='btn btn-pause' onclick='controlUnit(${u.id},"reset")'>Reset</button></div>`;
+                        }
+                        html += `</li>`;
                     });
                 }
                 document.getElementById('units-list').innerHTML = html;

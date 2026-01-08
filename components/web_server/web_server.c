@@ -308,6 +308,11 @@ static esp_err_t units_list_handler(httpd_req_t *req)
                  units[i].mac_addr[3], units[i].mac_addr[4], units[i].mac_addr[5]);
         cJSON_AddStringToObject(unit, "mac", mac_str);
         
+        // Add role information (1=laser, 2=finish)
+        cJSON_AddNumberToObject(unit, "role", units[i].role);
+        const char *role_str = (units[i].role == 2) ? "finish" : "laser";
+        cJSON_AddStringToObject(unit, "role_name", role_str);
+        
         cJSON_AddBoolToObject(unit, "online", units[i].is_online);
         cJSON_AddBoolToObject(unit, "laser_on", units[i].laser_on);
         cJSON_AddNumberToObject(unit, "rssi", units[i].rssi);

@@ -887,14 +887,28 @@ if (penalty_elapsed >= PENALTY_DISPLAY_TIME_MS) {  // 3000ms = 3 Sekunden
 - `sensor_manager/sensor_manager.c`: Default Threshold von 500 auf 2000 erhöht
 - `sensor_manager/sensor_manager.c`: Live ADC-Logging jede Sekunde hinzugefügt
 - `main/Kconfig.projbuild`: SENSOR_THRESHOLD default auf 2000, bessere Dokumentation
+- `main/Kconfig.projbuild`: MODULE_ROLE_FINISH hinzugefügt (dritte Rolle neben CONTROL/LASER)
+- `main/Kconfig.projbuild`: CONFIG_FINISH_BUTTON_PIN, CONFIG_FINISH_STATUS_LED_PIN, CONFIG_FINISH_BUTTON_LED_PIN
+- `main/main.c`: IS_FINISH_MODULE Define für Finish Button Rolle
+- `main/main.c` (FINISH): init_finish_button_unit() komplett implementiert
+- `main/main.c` (FINISH): Button ISR Handler + button_handler_task für Button-Logik
+- `main/main.c` (FINISH): LED-Steuerung (Status-LED blinkt, Button-LED geht aus beim Drücken)
+- `main/main.c` (FINISH): Multi-Channel Scanning + Pairing wie Laser Units
+- `main/main.c` (FINISH): espnow_recv_callback_finish() mit MSG_PAIRING_RESPONSE, MSG_RESET
+- `main/main.c` (FINISH): Heartbeat-Timer (3 Sekunden) nach erfolgreichem Pairing
+- `main/main.c` (FINISH): Sendet MSG_FINISH_PRESSED bei Button-Druck
 - `main/main.c` (LASER): Multi-Channel Scanning in pairing_timer_callback() implementiert
 - `main/main.c` (LASER): Channel-Scan State Reset in MSG_PAIRING_RESPONSE und MSG_RESET
 - `main/main.c` (LASER): Verwendung von espnow_change_channel() für Broadcast-Peer Update
 - `main/main.c` (LASER): MSG_HEARTBEAT Handler hinzugefügt (ignoriert eigene Broadcasts)
 - `main/main.c` (LASER): LED-Blink während Channel-Scanning
 - `main/main.c` (LASER): Heartbeat-Timer startet nach erfolgreichem Pairing (3 Sekunden)
+- `main/main.c` (LASER): Pairing Request mit role=1 (Laser Unit)
 - `main/main.c` (CONTROL): MSG_HEARTBEAT Handler zur Aktualisierung von last_seen
 - `main/main.c` (CONTROL): MSG_RESET Broadcast beim Startup für Re-Pairing
+- `main/main.c` (CONTROL): MSG_PAIRING_REQUEST Handler extrahiert Role aus Data
+- `main/main.c` (CONTROL): Unterscheidung zwischen "Laser Unit" und "Finish Button" in Logs
+- `game_logic.h`: laser_unit_info_t erweitert um role-Feld (0=unknown, 1=laser, 2=finish)
 - `wifi_ap_manager.c`: wifi_apsta_init() Funktion für korrekte APSTA-Initialisierung
 - `main/main.c` (CONTROL): Verwendung von wifi_apsta_init() für STA+AP netif Erstellung
 - `espnow_manager.c`: espnow_change_channel() aktualisiert Broadcast-Peer beim Channel-Wechsel
@@ -902,6 +916,9 @@ if (penalty_elapsed >= PENALTY_DISPLAY_TIME_MS) {  // 3000ms = 3 Sekunden
 - `espnow_manager.c`: espnow_add_peer() verwendet aktuellen WiFi-Channel für neue Peers
 - `game_logic.c`: game_control_laser() sendet Unicast statt Broadcast (nur spezifische Unit)
 - `web_server.c`: Timer-Display nur bei RUNNING/PAUSED/PENALTY (nicht bei IDLE/COMPLETE)
+- `web_server.c`: units_list_handler() fügt role und role_name zu JSON hinzu
+- `web_server/index.html`: Finish Button mit 🏁-Icon und grüner Border angezeigt
+- `web_server/index.html`: Laser ON/OFF Controls nur bei Laser Units (nicht bei Finish)
 - `game_logic.c`: PENALTY ist nur Display-Anzeige (3 Sekunden), keine echte Spielphase
 - `game_logic.c`: Beam Breaks nur im RUNNING State akzeptiert (PENALTY blockiert)
 - `display_manager.c`: display_game_results() zeigt Gesamtzeit + Beam Breaks
@@ -1424,78 +1441,175 @@ esp_err_t display_update(void) { return ESP_OK; }
 
 ---
 
-## 🏁 Finish-Button-Device (TODO - Hardware Implementation)
+## 🏁 Finish-Button-Device - IMPLEMENTIERT ✅
 
 **Zweck:** Separates ESP32-Modul mit Button zum erfolgreichen Abschließen des Spiels
 
 **Modul-Typ: FINISH**
-- Neue Modul-Rolle neben CONTROL und LASER
-- Einfaches ESP32-C3 Modul mit einem Button
+- Dritte Modul-Rolle neben CONTROL und LASER
+- ESP32-C3 Modul mit Button und LEDs
 - Sendet MSG_FINISH_PRESSED via ESP-NOW an Main Unit
 
 **Hardware-Komponenten:**
 - ESP32-C3 Mikrocontroller
-- Push-Button (mit Pull-Up Widerstand)
-- Status-LED (optional)
+- Push-Button (Active Low, GPIO 5 default)
+- Status-LED (GPIO 21 default) - Blinkt beim Pairing, solid wenn verbunden
+- Button-Beleuchtungs-LED (GPIO 20 default) - Leuchtet permanent, geht aus beim Drücken
 - Stromversorgung (5V USB oder Batterie)
 
 **Funktionsweise:**
 1. **Pairing:** Automatisches Pairing mit Main Unit beim Start (wie Laser Units)
-2. **Button-Press:** Wenn Button gedrückt wird → MSG_FINISH_PRESSED senden
+   - Sendet MSG_PAIRING_REQUEST mit role=2 (Finish Button)
+   - Scannt Channels 1, 6, 11 zyklisch
+   - Status-LED blinkt bis erfolgreiches Pairing
+   
+2. **Button-Press:** Wenn Button gedrückt wird (Active Low)
+   - Debouncing (50ms)
+   - Button-Beleuchtungs-LED geht AUS
+   - MSG_FINISH_PRESSED an Main Unit senden
+   - Nach Loslassen: LED geht wieder AN
+   
 3. **Main Unit Reaktion:** 
    - Empfängt MSG_FINISH_PRESSED
    - Ruft game_finish() auf
    - Setzt completion = COMPLETION_SOLVED
-   - Display zeigt "GAME COMPLETE!" (erfolg)
+   - Display zeigt "GAME COMPLETE!" (Erfolg)
    - Sendet MSG_GAME_STOP an alle Laser Units
+   
+4. **Heartbeat:** Sendet alle 3 Sekunden MSG_HEARTBEAT nach erfolgreichem Pairing
 
-**Implementation (Finish Unit - TODO):**
+**Implementation:**
 ```c
-// finish_unit/main.c
-static void button_press_handler(void)
+// main/main.c - Finish Button Module
+#ifdef IS_FINISH_MODULE
+
+// GPIO-Konfiguration (menuconfig):
+CONFIG_FINISH_BUTTON_PIN = 5          // Button GPIO (Active Low)
+CONFIG_FINISH_STATUS_LED_PIN = 21     // Status-LED (Pairing/Connection)
+CONFIG_FINISH_BUTTON_LED_PIN = 20     // Button-Beleuchtungs-LED
+
+static void button_isr_handler(void *arg)
 {
-    if (is_paired && game_is_running) {
-        ESP_LOGI(TAG, "Finish button pressed - sending MSG_FINISH_PRESSED");
-        espnow_send_message(main_unit_mac, MSG_FINISH_PRESSED, NULL, 0);
-        
-        // Optional: LED-Feedback
-        gpio_set_level(FINISH_LED_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(500));
-        gpio_set_level(FINISH_LED_PIN, 0);
+    button_pressed = true;  // Flag setzen
+}
+
+static void button_handler_task(void *arg)
+{
+    while (1) {
+        if (button_pressed) {
+            button_pressed = false;
+            vTaskDelay(pdMS_TO_TICKS(50));  // Debounce
+            
+            if (gpio_get_level(CONFIG_FINISH_BUTTON_PIN) == 0) {  // Still pressed
+                gpio_set_level(CONFIG_FINISH_BUTTON_LED_PIN, 0);  // Turn OFF illumination
+                
+                if (is_paired) {
+                    espnow_send_message(main_unit_mac, MSG_FINISH_PRESSED, NULL, 0);
+                }
+                
+                // Wait for release
+                while (gpio_get_level(CONFIG_FINISH_BUTTON_PIN) == 0) {
+                    vTaskDelay(pdMS_TO_TICKS(10));
+                }
+                
+                gpio_set_level(CONFIG_FINISH_BUTTON_LED_PIN, 1);  // Turn ON illumination
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
+
+static void pairing_timer_callback(void *arg)
+{
+    if (!is_paired) {
+        // Multi-Channel Scanning (1, 6, 11)
+        uint8_t role = 2;  // 2 = Finish Button
+        espnow_broadcast_message(MSG_PAIRING_REQUEST, &role, sizeof(role));
+    }
+}
+#endif
 ```
 
-**Main Unit Handler (IMPLEMENTIERT):**
+**Main Unit Handler:**
 ```c
 // main/main.c - espnow_recv_callback_main()
+case MSG_PAIRING_REQUEST:
+    uint8_t peer_role = (message->data_len >= 1) ? message->data[0] : 1;
+    const char *role_name = (peer_role == 2) ? "Finish Button" : "Laser Unit";
+    
+    espnow_add_peer(sender_mac, message->module_id, peer_role);
+    espnow_send_message(sender_mac, MSG_PAIRING_RESPONSE, NULL, 0);
+    ESP_LOGI(TAG, "%s %d added as peer", role_name, message->module_id);
+    break;
+
 case MSG_FINISH_PRESSED:
     ESP_LOGI(TAG, "Finish button pressed on module %d - completing game!", message->module_id);
-    game_finish();  // Successful completion
+    game_finish();  // Successful completion (COMPLETION_SOLVED)
     break;
 ```
 
-**Game Logic (IMPLEMENTIERT):**
+**Game Logic:**
 ```c
-// game_logic.c
+// components/game_logic/game_logic.c
 esp_err_t game_finish(void)
 {
-    // Set completion to SOLVED
+    if (current_state != GAME_STATE_RUNNING && current_state != GAME_STATE_PENALTY) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    // Set completion status to SOLVED
     current_player.completion = COMPLETION_SOLVED;
     current_state = GAME_STATE_COMPLETE;
     
-    // Send MSG_GAME_STOP to all laser units
+    // Stop game timer
+    esp_timer_stop(game_timer);
+    
+    // Broadcast MSG_GAME_STOP to all units
+    espnow_broadcast_message(MSG_GAME_STOP, NULL, 0);
+    
     // Update statistics
-    // Log: "Game finished successfully!"
+    game_stats.total_games++;
+    game_stats.games_completed++;  // Only count SOLVED as completed
+    
+    ESP_LOGI(TAG, "Game finished successfully via finish button!");
+    return ESP_OK;
 }
 ```
 
 **Display-Unterscheidung:**
-- **COMPLETION_SOLVED**: "GAME COMPLETE!" (grün/erfolgreich)
-- **COMPLETION_ABORTED_TIME**: "TIME LIMIT!" (rot/abgebrochen)
-- **COMPLETION_ABORTED_MANUAL**: "GAME CANCELED!" (gelb/abgebrochen)
+```c
+// components/display_manager/display_manager.c
+void display_game_results(uint32_t elapsed_time, uint16_t beam_breaks, completion_status_t completion)
+{
+    ssd1306_clear();
+    
+    if (completion == COMPLETION_SOLVED) {
+        ssd1306_draw_string(20, 0, "GAME COMPLETE!");  // Erfolg
+    } else {
+        ssd1306_draw_string(15, 0, "GAME CANCELED!");  // Abbruch
+    }
+    
+    ssd1306_draw_string(25, 3, "Total Time:");
+    // Zeit-Anzeige in Line 5
+    // Breaks-Anzeige in Line 7
+    ssd1306_update();
+}
+```
 
-**Konfiguration (Kconfig.projbuild - TODO):**
+**Web Interface - Spezielle Anzeige:**
+- Finish Button Units werden mit 🏁-Icon angezeigt
+- Grüne Border-Linie (border-left: 4px solid #4CAF50)
+- Keine Laser ON/OFF Controls (nur Reset Button)
+- Deutlich als "Finish Button" beschriftet statt "Laser Unit"
+
+```javascript
+// components/web_server/index.html
+let isFinish = u.role === 2;
+let unitType = isFinish ? '🏁 Finish Button' : 'Laser Unit';
+let unitStyle = isFinish ? 'style="border-left: 4px solid #4CAF50;"' : '';
+```
+
+**Konfiguration (Kconfig.projbuild):**
 ```
 choice MODULE_ROLE
     prompt "Module Role"

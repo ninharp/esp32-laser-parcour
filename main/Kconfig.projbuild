@@ -17,6 +17,12 @@ menu "Laser Parcour Configuration"
             help
                 Combined laser emitter and sensor unit that controls laser diode
                 and detects beam interruptions.
+
+        config MODULE_ROLE_FINISH
+            bool "Finish Button"
+            help
+                Finish line button device that marks successful game completion.
+                Sends MSG_FINISH_PRESSED when button is pressed.
     endchoice
 
     config MODULE_ID
@@ -288,6 +294,33 @@ menu "Laser Parcour Configuration"
             depends on MODULE_ROLE_LASER
             help
                 GPIO pin for red status LED (beam broken).
+
+        config FINISH_BUTTON_PIN
+            int "Finish Button GPIO Pin"
+            range 0 21
+            default 5
+            depends on MODULE_ROLE_FINISH
+            help
+                GPIO pin for finish button input (active low with internal pull-up).
+                Pressing this button sends MSG_FINISH_PRESSED to complete the game.
+
+        config FINISH_STATUS_LED_PIN
+            int "Finish Button Status LED Pin"
+            range 0 21
+            default 21
+            depends on MODULE_ROLE_FINISH
+            help
+                GPIO pin for status LED indicating connection/pairing status.
+                LED blinks when not paired, solid when paired.
+
+        config FINISH_BUTTON_LED_PIN
+            int "Finish Button Illumination LED Pin"
+            range 0 21
+            default 20
+            depends on MODULE_ROLE_FINISH
+            help
+                GPIO pin for button illumination LED.
+                This LED turns OFF when button is pressed to provide visual feedback.
 
         config SENSOR_THRESHOLD
             int "Beam Detection Threshold"

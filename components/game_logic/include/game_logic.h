@@ -198,6 +198,7 @@ esp_err_t game_reset_stats(void);
 typedef struct {
     uint8_t module_id;           // Module ID
     uint8_t mac_addr[6];         // MAC address
+    uint8_t role;                // Module role (0=unknown, 1=laser, 2=finish)
     bool is_online;              // Is unit responding
     bool laser_on;               // Is laser currently on
     uint32_t last_seen;          // Last heartbeat timestamp (ms)
