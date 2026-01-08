@@ -687,7 +687,13 @@ CONFIG_SENSOR_LED_RED_PIN=2
 - Units werden bei jeder ESP-NOW Message via game_update_laser_unit() aktualisiert
 - `last_seen` Timestamp wird gesetzt und `is_online = true`
 - Status wird als "offline" markiert wenn keine Message seit 5 Sekunden
-- **Noch TODO:** Heartbeat Messages für persistente Online-Anzeige auch ohne Game-Activity
+- **GELÖST (2025-01-08):** Heartbeat-System implementiert für persistente Online-Anzeige
+
+**Heartbeat-System (2025-01-08):**
+- Laser Units senden alle 3 Sekunden MSG_HEARTBEAT Broadcasts
+- Main Unit aktualisiert `last_seen` Timestamp bei jedem Heartbeat
+- Laser Units ignorieren eigene Heartbeat-Broadcasts (MSG_HEARTBEAT Handler)
+- Units bleiben online solange Heartbeats empfangen werden
 
 ### Web Interface Status Updates
 
@@ -729,11 +735,18 @@ CONFIG_SENSOR_LED_RED_PIN=2
 - `main/main.c` (LASER): Multi-Channel Scanning in pairing_timer_callback() implementiert
 - `main/main.c` (LASER): Channel-Scan State Reset in MSG_PAIRING_RESPONSE und MSG_RESET
 - `main/main.c` (LASER): Verwendung von espnow_change_channel() für Broadcast-Peer Update
+- `main/main.c` (LASER): MSG_HEARTBEAT Handler hinzugefügt (ignoriert eigene Broadcasts)
+- `main/main.c` (LASER): LED-Blink während Channel-Scanning
+- `main/main.c` (LASER): Heartbeat-Timer startet nach erfolgreichem Pairing (3 Sekunden)
+- `main/main.c` (CONTROL): MSG_HEARTBEAT Handler zur Aktualisierung von last_seen
+- `main/main.c` (CONTROL): MSG_RESET Broadcast beim Startup für Re-Pairing
 - `wifi_ap_manager.c`: wifi_apsta_init() Funktion für korrekte APSTA-Initialisierung
 - `main/main.c` (CONTROL): Verwendung von wifi_apsta_init() für STA+AP netif Erstellung
 - `espnow_manager.c`: espnow_change_channel() aktualisiert Broadcast-Peer beim Channel-Wechsel
 - `espnow_manager.c`: espnow_manager_init() verwendet aktuellen WiFi-Channel statt konfigurierten
 - `espnow_manager.c`: espnow_add_peer() verwendet aktuellen WiFi-Channel für neue Peers
+- `game_logic.c`: game_control_laser() sendet Unicast statt Broadcast (nur spezifische Unit)
+- `web_server.c`: Timer-Display nur bei RUNNING/PAUSED/PENALTY (nicht bei IDLE/COMPLETE)
 
 ### Sensor Detection Threshold
 

@@ -497,6 +497,10 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             laser_turn_off();
             gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
             break;
+        case MSG_HEARTBEAT:
+            // Ignore heartbeat messages (we send them, don't need to process them)
+            ESP_LOGD(TAG, "Heartbeat received (ignoring own broadcast)");
+            break;
         case MSG_PAIRING_RESPONSE:
             ESP_LOGI(TAG, "Pairing response received - paired successfully on channel %d!", current_scan_channel);
             is_paired = true;

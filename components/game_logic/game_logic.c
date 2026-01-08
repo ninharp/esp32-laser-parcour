@@ -450,18 +450,26 @@ esp_err_t game_control_laser(uint8_t module_id, bool laser_on, uint8_t intensity
              module_id, laser_on ? "ON" : "OFF", intensity);
     
     // Find unit and update state
+    uint8_t *target_mac = NULL;
     for (size_t i = 0; i < laser_unit_count; i++) {
         if (laser_units[i].module_id == module_id) {
             laser_units[i].laser_on = laser_on;
+            target_mac = laser_units[i].mac_addr;
             break;
         }
     }
     
+    if (!target_mac) {
+        ESP_LOGE(TAG, "Laser unit %d not found", module_id);
+        return ESP_ERR_NOT_FOUND;
+    }
+    
+    // Send unicast message to specific laser unit
     if (laser_on) {
         uint8_t data[1] = {intensity};
-        return espnow_broadcast_message(MSG_LASER_ON, data, sizeof(data));
+        return espnow_send_message(target_mac, MSG_LASER_ON, data, sizeof(data));
     } else {
-        return espnow_broadcast_message(MSG_LASER_OFF, NULL, 0);
+        return espnow_send_message(target_mac, MSG_LASER_OFF, NULL, 0);
     }
 }
 
