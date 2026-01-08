@@ -119,7 +119,7 @@ esp_err_t display_set_screen(display_screen_t screen)
 /**
  * Display game status
  */
-esp_err_t display_game_status(uint32_t elapsed_time, uint16_t beam_breaks, int32_t score)
+esp_err_t display_game_status(uint32_t elapsed_time, uint16_t beam_breaks)
 {
     if (!initialized) {
         return ESP_FAIL;
@@ -150,20 +150,15 @@ esp_err_t display_game_status(uint32_t elapsed_time, uint16_t beam_breaks, int32
     // Line 5: Beam breaks
     char breaks_str[20];
     snprintf(breaks_str, sizeof(breaks_str), "Breaks: %d", beam_breaks);
-    ssd1306_draw_string(5, 5, breaks_str);
-    
-    // Line 7: Score
-    char score_str[20];
-    snprintf(score_str, sizeof(score_str), "Score: %ld", score);
-    ssd1306_draw_string(5, 7, score_str);
+    ssd1306_draw_string(5, 6, breaks_str);
 #elif defined(CONFIG_OLED_SH1106)
     // SH1106 implementation (TODO when driver is available)
 #endif
     
     display_update();
     
-    ESP_LOGD(TAG, "Game Status - Time: %02lu:%02lu.%02lu, Breaks: %d, Score: %ld",
-             minutes, seconds, millis, beam_breaks, score);
+    ESP_LOGD(TAG, "Game Status - Time: %02lu:%02lu.%02lu, Breaks: %d",
+             minutes, seconds, millis, beam_breaks);
     
     return ESP_OK;
 }
@@ -226,7 +221,7 @@ esp_err_t display_text(const char *message, uint8_t line)
 /**
  * Display game results
  */
-esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks, int32_t final_score)
+esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks)
 {
     if (!initialized) {
         return ESP_FAIL;
@@ -234,6 +229,7 @@ esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks, int32_
     
     uint32_t minutes = final_time / 60000;
     uint32_t seconds = (final_time % 60000) / 1000;
+    uint32_t millis = (final_time % 1000) / 10;
     
     display_clear();
     
@@ -244,20 +240,15 @@ esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks, int32_
     // Line 2: Divider
     ssd1306_draw_hline(2, 0xFF);
     
-    // Line 3: Time
+    // Line 3-4: Time (large)
     char time_str[20];
-    snprintf(time_str, sizeof(time_str), "Time: %02lu:%02lu", minutes, seconds);
-    ssd1306_draw_string(15, 3, time_str);
+    snprintf(time_str, sizeof(time_str), "%02lu:%02lu.%02lu", minutes, seconds, millis);
+    ssd1306_draw_string(10, 4, time_str);
     
-    // Line 5: Breaks
+    // Line 6: Breaks
     char breaks_str[20];
     snprintf(breaks_str, sizeof(breaks_str), "Breaks: %d", beam_breaks);
-    ssd1306_draw_string(15, 5, breaks_str);
-    
-    // Line 7: Score
-    char score_str[20];
-    snprintf(score_str, sizeof(score_str), "Score: %ld", final_score);
-    ssd1306_draw_string(15, 7, score_str);
+    ssd1306_draw_string(15, 6, breaks_str);
 #elif defined(CONFIG_OLED_SH1106)
     // SH1106 implementation (TODO)
 #endif
@@ -265,10 +256,9 @@ esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks, int32_
     display_update();
     
     ESP_LOGI(TAG, "=== GAME RESULTS ===");
-    ESP_LOGI(TAG, "Time: %02lu:%02lu", minutes, seconds);
+    ESP_LOGI(TAG, "Time: %02lu:%02lu.%02lu", minutes, seconds, millis);
     ESP_LOGI(TAG, "Beam Breaks: %d", beam_breaks);
-    ESP_LOGI(TAG, "Final Score: %ld", final_score);
-    ESP_LOGI(TAG, "===================");
+    ESP_LOGI(TAG, "====================");
     
     return ESP_OK;
 }
@@ -336,7 +326,7 @@ esp_err_t display_set_screen(display_screen_t screen)
     return ESP_OK;
 }
 
-esp_err_t display_game_status(uint32_t elapsed_time, uint16_t beam_breaks, int32_t score)
+esp_err_t display_game_status(uint32_t elapsed_time, uint16_t beam_breaks)
 {
     return ESP_OK;
 }
@@ -351,7 +341,7 @@ esp_err_t display_text(const char *message, uint8_t line)
     return ESP_OK;
 }
 
-esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks, int32_t final_score)
+esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks)
 {
     return ESP_OK;
 }

@@ -185,8 +185,7 @@ static void display_update_task(void *pvParameters)
                 display_set_screen(SCREEN_GAME_RUNNING);
                 if (game_get_player_data(&player_data) == ESP_OK) {
                     display_game_status(player_data.elapsed_time, 
-                                      player_data.beam_breaks, 
-                                      player_data.score);
+                                      player_data.beam_breaks);
                 }
                 break;
                 
@@ -212,8 +211,7 @@ static void display_update_task(void *pvParameters)
                 display_set_screen(SCREEN_GAME_PAUSED);
                 if (game_get_player_data(&player_data) == ESP_OK) {
                     display_game_status(player_data.elapsed_time, 
-                                      player_data.beam_breaks, 
-                                      player_data.score);
+                                      player_data.beam_breaks);
                 }
                 break;
                 
@@ -223,8 +221,7 @@ static void display_update_task(void *pvParameters)
                     display_set_screen(SCREEN_GAME_COMPLETE);
                     if (game_get_player_data(&player_data) == ESP_OK) {
                         display_game_results(player_data.elapsed_time,
-                                           player_data.beam_breaks,
-                                           player_data.score);
+                                           player_data.beam_breaks);
                     }
                     complete_screen_shown = true;
                 }
@@ -249,8 +246,8 @@ static void display_update_task(void *pvParameters)
                     uint32_t seconds = (player_data.elapsed_time % 60000) / 1000;
                     const char* state_str = (state == GAME_STATE_RUNNING) ? "RUNNING" : 
                                            (state == GAME_STATE_PENALTY) ? "PENALTY" : "PAUSED";
-                    ESP_LOGI(TAG, "=== GAME STATUS ===  State: %s | Time: %02lu:%02lu | Breaks: %d | Score: %ld",
-                            state_str, minutes, seconds, player_data.beam_breaks, player_data.score);
+                    ESP_LOGI(TAG, "=== GAME STATUS ===  State: %s | Time: %02lu:%02lu | Breaks: %d",
+                            state_str, minutes, seconds, player_data.beam_breaks);
                 }
                 last_status_log = now;
             }

@@ -212,7 +212,7 @@ esp_err_t ssd1306_display_power(bool on)
 ```c
 esp_err_t game_logic_init(void)
 esp_err_t game_start(game_mode_t mode, const char *player_name)  // Broadcasts MSG_GAME_START
-esp_err_t game_stop(void)                                         // Broadcasts MSG_GAME_STOP
+esp_err_t game_stop(void)                                         // Broadcasts MSG_GAME_STOP, sets completion status
 esp_err_t game_pause(void)
 esp_err_t game_resume(void)
 esp_err_t game_beam_broken(uint8_t sensor_id)
@@ -231,11 +231,24 @@ esp_err_t game_set_config(const game_config_t *config)
 - GAME_STATE_COMPLETE - Beendet
 - GAME_STATE_ERROR - Fehlerzustand
 
+**Completion Status:**
+- COMPLETION_NONE - Spiel noch nicht beendet
+- COMPLETION_SOLVED - Via Finish-Button beendet (TODO: Button-Device)
+- COMPLETION_ABORTED_TIME - Max-Zeit überschritten
+- COMPLETION_ABORTED_MANUAL - Manuell abgebrochen
+
 **Game Modes:**
 - GAME_MODE_SINGLE_SPEEDRUN - Einzelspieler Speedrun
 - GAME_MODE_MULTIPLAYER - Mehrspieler
 - GAME_MODE_TRAINING - Training (keine Penalties)
 - GAME_MODE_CUSTOM - Benutzerdefiniert
+
+**Spielkonzept (Zeit-basiert):**
+- Zeit zählt **aufwärts** von 0 Sekunden
+- Penalty-Sekunden werden **zur Zeit addiert** (nicht subtrahiert)
+- Kein Lives/Score-System (entfernt)
+- Nur Zeit und Beam Breaks werden getrackt
+- Optionales Max-Zeit-Limit (0 = unbegrenzt)
 
 **Dependencies:** `esp_event`, `freertos`, `esp_timer`
 
@@ -700,6 +713,53 @@ CONFIG_SENSOR_LED_RED_PIN=2
 **Problem:** game_start() änderte State aber sendete keine Messages an Laser Units
 **Lösung:** game_start() ruft espnow_broadcast_message(MSG_GAME_START) auf
 **Status:** RUNNING-State wird direkt gesetzt (kein COUNTDOWN für Web-Interface)
+
+### Spielsystem-Vereinfachung (2025-01-08)
+
+**Änderung:** Komplette Umstellung auf zeit-basiertes Spiel ohne Lives/Score
+
+**Neues Spielkonzept:**
+- **Zeit zählt aufwärts** von 0 Sekunden
+- **Penalty-Sekunden werden zur Zeit addiert** (nicht mehr subtrahiert)
+- **Kein Score-System** mehr (entfernt)
+- **Kein Lives-System** (entfernt)
+- **Nur Zeit und Beam Breaks** werden getrackt
+
+**Completion Status:**
+- `COMPLETION_SOLVED` - Spiel via Finish-Button beendet (TODO: Button-Device)
+- `COMPLETION_ABORTED_TIME` - Spiel durch Max-Zeit abgebrochen
+- `COMPLETION_ABORTED_MANUAL` - Spiel manuell per Web-Interface abgebrochen
+
+**Code-Änderungen:**
+- `game_logic.h`: `completion_status_t` Enum hinzugefügt
+- `player_data_t`: `score` entfernt, `completion` hinzugefügt
+- `game_config_t`: `duration` → `max_time` (0 = unbegrenzt), alle Score-Felder entfernt
+- `game_logic.c`: Penalty-Zeit wird **addiert** statt subtrahiert
+- `game_logic.c`: `game_calculate_score()` Funktion entfernt
+- `display_manager.h/c`: Score-Parameter aus allen Funktionen entfernt
+- `display_manager.c`: Display zeigt nur noch Zeit (MM:SS.ms) und Beam Breaks
+- `main.c`: Alle display_game_status/display_game_results Aufrufe ohne Score
+
+**Penalty-System (NEU - Addition statt Subtraktion):**
+```c
+// Alte Version (FALSCH - Clock pause):
+player_data->elapsed_time = raw_elapsed - total_penalty_time;
+
+// Neue Version (KORREKT - Penalty seconds added):
+player_data->elapsed_time = raw_elapsed + total_penalty_time;
+```
+
+**Beispiel-Spielablauf:**
+1. Start: Zeit = 0:00
+2. Nach 30 Sekunden: Beam Break → +15s Penalty
+3. Anzeige: 0:45 (30s + 15s Penalty)
+4. Finish nach insgesamt 2 Minuten + 3 Breaks (45s Penalty)
+5. Endzeit: 2:45 (2 min + 3×15s)
+
+**Max-Zeit-Limit:**
+- `configuration.max_time` (Sekunden, 0 = unbegrenzt)
+- Bei Überschreitung: Automatischer Abort mit `COMPLETION_ABORTED_TIME`
+- Geprüft in `game_get_player_data()` (TODO: Auto-Stop implementieren)
 
 ### Laser Unit MSG_RESET Support
 

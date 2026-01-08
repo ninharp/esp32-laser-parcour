@@ -35,6 +35,16 @@ typedef enum {
 } game_state_t;
 
 /**
+ * Completion status - how the game ended
+ */
+typedef enum {
+    COMPLETION_NONE = 0,         // Game not completed yet
+    COMPLETION_SOLVED,           // Completed via finish button
+    COMPLETION_ABORTED_TIME,     // Aborted due to max time
+    COMPLETION_ABORTED_MANUAL    // Manually aborted via web interface
+} completion_status_t;
+
+/**
  * Game modes
  */
 typedef enum {
@@ -52,9 +62,9 @@ typedef struct {
     char name[32];               // Player name
     uint32_t start_time;         // Game start timestamp (ms)
     uint32_t end_time;           // Game end timestamp (ms)
-    uint32_t elapsed_time;       // Total elapsed time (ms)
+    uint32_t elapsed_time;       // Total elapsed time (ms) - counts UP from 0
     uint16_t beam_breaks;        // Number of beam breaks
-    int32_t score;               // Final score
+    completion_status_t completion; // How the game ended
     bool is_active;              // Is this player currently active
 } player_data_t;
 
@@ -75,12 +85,9 @@ typedef struct {
  */
 typedef struct {
     game_mode_t mode;            // Current game mode
-    uint32_t duration;           // Game duration in seconds
+    uint32_t max_time;           // Maximum time in seconds (0 = no limit)
     uint32_t penalty_time;       // Penalty time per beam break (seconds)
     uint32_t countdown_time;     // Pre-game countdown (seconds)
-    int32_t base_score;          // Starting score
-    int32_t time_bonus_mult;     // Time bonus multiplier
-    int32_t penalty_points;      // Points deducted per beam break
     uint8_t max_players;         // Maximum players for multiplayer
 } game_config_t;
 
@@ -169,15 +176,7 @@ esp_err_t game_get_config(game_config_t *config);
 esp_err_t game_set_config(const game_config_t *config);
 
 /**
- * Calculate final score based on time and penalties
- * 
- * @param elapsed_time Time elapsed in milliseconds
- * @param beam_breaks Number of beam breaks
- * @return Calculated score
- */
-int32_t game_calculate_score(uint32_t elapsed_time, uint16_t beam_breaks);
 
-/**
  * Reset game statistics
  * 
  * @return ESP_OK on success, ESP_FAIL on error

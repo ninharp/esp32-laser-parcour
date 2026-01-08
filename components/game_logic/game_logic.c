@@ -25,12 +25,9 @@ static player_data_t current_player = {0};
 static game_stats_t statistics = {0};
 static game_config_t configuration = {
     .mode = GAME_MODE_SINGLE_SPEEDRUN,
-    .duration = 180,            // 3 minutes default
-    .penalty_time = 5,          // 5 seconds penalty
+    .max_time = 0,              // No time limit (0 = unlimited)
+    .penalty_time = 15,         // 15 seconds penalty per beam break
     .countdown_time = 5,        // 5 second countdown
-    .base_score = 1000,
-    .time_bonus_mult = 10,
-    .penalty_points = -50,
     .max_players = 8
 };
 
@@ -92,10 +89,11 @@ esp_err_t game_start(game_mode_t mode, const char *player_name)
     }
     current_player.start_time = (uint32_t)(esp_timer_get_time() / 1000);
     current_player.is_active = true;
+    current_player.completion = COMPLETION_NONE;
     
     // Reset penalty tracking
     penalty_start_time = 0;
-    total_penalty_time = 0;
+    total_penalty_time = 0;  // Total penalty seconds ADDED to elapsed time
     
     // Set game mode
     configuration.mode = mode;
@@ -148,20 +146,19 @@ esp_err_t game_stop(void)
     current_player.end_time = (uint32_t)(esp_timer_get_time() / 1000);
     uint32_t raw_elapsed = current_player.end_time - current_player.start_time;
     
-    // Subtract accumulated penalty time from final elapsed time (penalty pauses the clock)
-    current_player.elapsed_time = raw_elapsed - total_penalty_time;
+    // ADD accumulated penalty time to final elapsed time
+    current_player.elapsed_time = raw_elapsed + total_penalty_time;
     
-    // If currently in penalty, subtract remaining penalty time
+    // If currently in penalty, add remaining penalty time
     if (current_state == GAME_STATE_PENALTY && penalty_start_time > 0) {
         uint32_t penalty_progress = current_player.end_time - penalty_start_time;
-        current_player.elapsed_time -= penalty_progress;
+        current_player.elapsed_time += penalty_progress;
     }
     
-    // Calculate final score
-    current_player.score = game_calculate_score(
-        current_player.elapsed_time,
-        current_player.beam_breaks
-    );
+    // Set completion status if not already set
+    if (current_player.completion == COMPLETION_NONE) {
+        current_player.completion = COMPLETION_ABORTED_MANUAL;
+    }
     
     // Update statistics
     statistics.total_games++;
@@ -180,8 +177,8 @@ esp_err_t game_stop(void)
     current_state = GAME_STATE_COMPLETE;
     current_player.is_active = false;
     
-    ESP_LOGI(TAG, "Game stopped - Time: %lu ms, Beam Breaks: %d, Score: %ld",
-             current_player.elapsed_time, current_player.beam_breaks, current_player.score);
+    ESP_LOGI(TAG, "Game stopped - Time: %lu ms, Beam Breaks: %d, Completion: %d",
+             current_player.elapsed_time, current_player.beam_breaks, current_player.completion);
     
     xSemaphoreGive(game_mutex);
     
@@ -323,14 +320,20 @@ esp_err_t game_get_player_data(player_data_t *player_data)
     // Calculate elapsed time for running games
     if (current_state == GAME_STATE_RUNNING || current_state == GAME_STATE_PENALTY) {
         uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
-        // Subtract penalty times from elapsed time (penalty pauses the clock)
+        // ADD penalty times to elapsed time (penalty adds seconds to total time)
         uint32_t raw_elapsed = now - current_player.start_time;
-        player_data->elapsed_time = raw_elapsed - total_penalty_time;
+        player_data->elapsed_time = raw_elapsed + total_penalty_time;
         
-        // If currently in penalty, subtract current penalty progress as well
+        // If currently in penalty, add current penalty progress as well
         if (current_state == GAME_STATE_PENALTY && penalty_start_time > 0) {
             uint32_t current_penalty_progress = now - penalty_start_time;
-            player_data->elapsed_time -= current_penalty_progress;
+            player_data->elapsed_time += current_penalty_progress;
+        }
+        
+        // Check for max time limit (if configured)
+        if (configuration.max_time > 0 && player_data->elapsed_time >= (configuration.max_time * 1000)) {
+            // Max time exceeded - abort game automatically
+            ESP_LOGW(TAG, "Max time limit reached (%lu seconds)", configuration.max_time);
         }
     }
     
@@ -395,30 +398,6 @@ esp_err_t game_set_config(const game_config_t *config)
     
     xSemaphoreGive(game_mutex);
     return ESP_OK;
-}
-
-/**
- * Calculate final score
- */
-int32_t game_calculate_score(uint32_t elapsed_time, uint16_t beam_breaks)
-{
-    int32_t score = configuration.base_score;
-    
-    // Add time bonus (faster completion = higher score)
-    uint32_t time_seconds = elapsed_time / 1000;
-    uint32_t time_remaining = (configuration.duration > time_seconds) ? 
-                               (configuration.duration - time_seconds) : 0;
-    score += (int32_t)(time_remaining * configuration.time_bonus_mult);
-    
-    // Subtract penalty points
-    score += (int32_t)(beam_breaks * configuration.penalty_points);
-    
-    // Ensure score doesn't go negative
-    if (score < 0) {
-        score = 0;
-    }
-    
-    return score;
 }
 
 /**

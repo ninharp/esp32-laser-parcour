@@ -66,14 +66,13 @@ esp_err_t display_update(void);
 esp_err_t display_set_screen(display_screen_t screen);
 
 /**
- * Display game time and score
+ * Display game time and beam breaks
  * 
  * @param elapsed_time Elapsed time in milliseconds
  * @param beam_breaks Number of beam breaks
- * @param score Current score
  * @return ESP_OK on success, error code otherwise
  */
-esp_err_t display_game_status(uint32_t elapsed_time, uint16_t beam_breaks, int32_t score);
+esp_err_t display_game_status(uint32_t elapsed_time, uint16_t beam_breaks);
 
 /**
  * Display countdown
@@ -97,10 +96,9 @@ esp_err_t display_text(const char *message, uint8_t line);
  * 
  * @param final_time Final time in milliseconds
  * @param beam_breaks Number of beam breaks
- * @param final_score Final score
  * @return ESP_OK on success, error code otherwise
  */
-esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks, int32_t final_score);
+esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks);
 
 /**
  * Set display contrast
