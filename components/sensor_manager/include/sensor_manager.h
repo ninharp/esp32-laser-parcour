@@ -36,6 +36,13 @@ typedef enum {
 typedef void (*beam_break_callback_t)(uint8_t sensor_id);
 
 /**
+ * Beam restore callback
+ * 
+ * @param sensor_id Sensor identifier
+ */
+typedef void (*beam_restore_callback_t)(uint8_t sensor_id);
+
+/**
  * Initialize sensor manager
  * 
  * @param adc_channel ADC channel for sensor
@@ -52,6 +59,14 @@ esp_err_t sensor_manager_init(uint8_t adc_channel, uint16_t threshold, uint32_t 
  * @return ESP_OK on success, error code otherwise
  */
 esp_err_t sensor_register_callback(beam_break_callback_t callback);
+
+/**
+ * Register beam restore callback
+ * 
+ * @param callback Callback function
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t sensor_register_restore_callback(beam_restore_callback_t callback);
 
 /**
  * Read current ADC value

@@ -357,6 +357,7 @@ static void init_main_unit(void)
 #ifdef CONFIG_MODULE_ROLE_LASER
 // Pairing state
 static bool is_paired = false;
+static bool is_game_mode = false;  // Track if in game mode (vs manual laser control)
 static esp_timer_handle_t pairing_timer = NULL;
 static esp_timer_handle_t heartbeat_timer = NULL;
 static esp_timer_handle_t led_blink_timer = NULL;
@@ -466,14 +467,24 @@ static void beam_break_callback(uint8_t sensor_id)
 {
     ESP_LOGW(TAG, "Beam broken detected on sensor %d!", sensor_id);
     
-    // Turn on red LED, turn off green LED
+    // Turn on red LED, turn off green LED (in game mode)
     gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 1);
     gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
     
     // Broadcast beam break to main unit
     espnow_broadcast_message(MSG_BEAM_BROKEN, &sensor_id, sizeof(sensor_id));
+}
+
+/**
+ * Beam restore callback (Laser Unit)
+ */
+static void beam_restore_callback(uint8_t sensor_id)
+{
+    ESP_LOGI(TAG, "Beam restored on sensor %d", sensor_id);
     
-    // Restore green LED after short delay (handled by sensor manager debounce)
+    // Turn on green LED, turn off red LED (in game mode)
+    gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 1);
+    gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
 }
 
 /**
@@ -488,32 +499,47 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
     switch (message->msg_type) {
         case MSG_GAME_START:
             ESP_LOGI(TAG, "Game start command received");
+            is_game_mode = true;  // Enter game mode
             laser_turn_on(100);  // Turn laser on at full intensity
-            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);
+            // Status LED stays on (connected)
+            // Initialize game LEDs: green on (beam OK), red off
             gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 1);
+            gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
             // Start sensor monitoring
             sensor_start_monitoring();
-            ESP_LOGI(TAG, "Sensor monitoring started");
+            ESP_LOGI(TAG, "Sensor monitoring started (Game Mode)");
             break;
         case MSG_GAME_STOP:
             ESP_LOGI(TAG, "Game stop command received");
+            is_game_mode = false;  // Exit game mode
             // Stop sensor monitoring
             sensor_stop_monitoring();
             ESP_LOGI(TAG, "Sensor monitoring stopped");
             laser_turn_off();
-            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
+            // Status LED stays on (connected)
+            // Turn off game LEDs
             gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
             gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
             break;
         case MSG_LASER_ON:
-            ESP_LOGI(TAG, "Laser ON command");
+            ESP_LOGI(TAG, "Laser ON command (manual)");
             laser_turn_on(message->data[0]);  // Intensity in data[0]
-            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);
+            // Manual laser on: both green and red LEDs on (only if not in game mode)
+            if (!is_game_mode) {
+                gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 1);
+                gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 1);
+            }
+            // Status LED stays on (connected)
             break;
         case MSG_LASER_OFF:
-            ESP_LOGI(TAG, "Laser OFF command");
+            ESP_LOGI(TAG, "Laser OFF command (manual)");
             laser_turn_off();
-            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
+            // Turn off manual laser LEDs (only if not in game mode)
+            if (!is_game_mode) {
+                gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
+                gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
+            }
+            // Status LED stays on (connected)
             break;
         case MSG_HEARTBEAT:
             // Ignore heartbeat messages (we send them, don't need to process them)
@@ -524,6 +550,9 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             is_paired = true;
             scan_attempts_on_channel = 0;  // Reset scan state
             led_blink_state = 0;           // Reset blink state
+            
+            // Status LED solid on = connected/paired
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);
             
             // Stop pairing timer
             if (pairing_timer) {
@@ -549,10 +578,11 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
                 ESP_LOGE(TAG, "Heartbeat timer is NULL!");
             }
             
-            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);  // Status LED on solid when paired
             break;
         case MSG_RESET:
             ESP_LOGI(TAG, "Reset command received");
+            // Reset game mode
+            is_game_mode = false;
             // Stop sensor monitoring
             sensor_stop_monitoring();
             // Turn off laser and all LEDs
@@ -628,6 +658,7 @@ static void init_laser_unit(void)
              CONFIG_SENSOR_PIN, CONFIG_SENSOR_THRESHOLD);
     ESP_ERROR_CHECK(sensor_manager_init(CONFIG_SENSOR_PIN, CONFIG_SENSOR_THRESHOLD, CONFIG_DEBOUNCE_TIME));
     ESP_ERROR_CHECK(sensor_register_callback(beam_break_callback));
+    ESP_ERROR_CHECK(sensor_register_restore_callback(beam_restore_callback));
     
     // Initialize status LEDs
     ESP_LOGI(TAG, "  Initializing Status LEDs (Status: GPIO %d, Green: GPIO %d, Red: GPIO %d)",

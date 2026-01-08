@@ -645,9 +645,12 @@ CONFIG_SENSOR_LED_RED_PIN=2
      - MSG_RESET → Laser ausschalten, LEDs aus, Pairing zurücksetzen
 
 5. **LED Feedback:**
-   - Status-LED: Pairing-Status / Laser aktiv
-   - Grün-LED: Beam OK
-   - Rot-LED: Beam unterbrochen
+   - **Status-LED**: Verbindungsstatus (blinkt während Pairing, dauerhaft an wenn verbunden/paired)
+   - **Grün+Rot LEDs**: Dual-Modus
+     - **Manueller Modus** (MSG_LASER_ON/OFF): Beide LEDs an/aus
+     - **Game-Modus** (MSG_GAME_START/STOP): 
+       - Grün-LED: Beam OK (gesteuert durch sensor_manager)
+       - Rot-LED: Beam unterbrochen (gesteuert durch sensor_manager)
 
 ---
 
@@ -876,9 +879,55 @@ esp_err_t find_main_unit_channel(uint8_t *channel)
 - Typical Case: Channel 6 (75-90 Sekunden)
 - Worst Case: Channel 13 (195 Sekunden = 3.25 Minuten)
 
+### LED Control Logic (2025-01-08)
+
+**Problem:** Status-LED wurde für Laser ON/OFF verwendet, aber sollte für Verbindungsstatus sein. Grün/Rot LEDs sollten sowohl für manuellen Betrieb als auch Game-Modus verwendet werden.
+
+**Lösung: Dual-Modus LED System**
+
+**Status-LED (CONFIG_LASER_STATUS_LED_PIN):**
+- **Während Pairing:** Blinkt mit 500ms (led_blink_timer)
+- **Nach erfolgreichem Pairing:** Dauerhaft an (Verbunden)
+- **Nach MSG_RESET:** Aus (getrennt)
+- **Unabhängig von Laser ON/OFF**
+
+**Grün + Rot LEDs (CONFIG_SENSOR_LED_GREEN/RED_PIN):**
+
+1. **Manueller Modus** (MSG_LASER_ON/OFF):
+   - `MSG_LASER_ON`: Beide LEDs an (grün + rot = gelb/orange)
+   - `MSG_LASER_OFF`: Beide LEDs aus
+   - Nur aktiv wenn `!is_game_mode`
+
+2. **Game-Modus** (MSG_GAME_START/STOP):
+   - `MSG_GAME_START`: 
+     - `is_game_mode = true`
+     - Grün-LED an (initial Beam OK)
+     - Rot-LED aus
+   - **Während Game:** 
+     - `beam_break_callback()`: Rot an, Grün aus
+     - `beam_restore_callback()`: Grün an, Rot aus
+   - `MSG_GAME_STOP`: 
+     - `is_game_mode = false`
+     - Beide LEDs aus
+
+**Code-Änderungen:**
+- `main/main.c`: Variable `is_game_mode` hinzugefügt
+- `main/main.c`: MSG_GAME_START/STOP setzen `is_game_mode` Flag
+- `main/main.c`: MSG_LASER_ON/OFF prüfen `!is_game_mode` vor LED-Steuerung
+- `main/main.c`: MSG_PAIRING_RESPONSE schaltet Status-LED dauerhaft an
+- `main/main.c`: beam_restore_callback() hinzugefügt für grüne LED
+- `sensor_manager.h`: beam_restore_callback_t Typedef hinzugefügt
+- `sensor_manager.c`: sensor_register_restore_callback() implementiert
+- `sensor_manager.c`: restore_callback beim Beam-Restore aufgerufen
+
+**Ergebnis:**
+- Klare Trennung: Status-LED = Verbindung, Grün/Rot = Laser/Game-Status
+- Im Game-Modus: Live-Feedback über Beam-Status
+- Im manuellen Modus: Beide LEDs = visuelles Feedback für Laser ON
+
 ---
 
-## �🐛 Debugging
+## 🐛 Debugging
 
 ### Log-Levels
 

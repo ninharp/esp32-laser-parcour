@@ -21,6 +21,7 @@ static uint16_t detection_threshold = 2000;  // For LDR: no laser ~850, with las
 static uint32_t debounce_time_ms = 100;
 static sensor_status_t current_status = SENSOR_BEAM_DETECTED;
 static beam_break_callback_t break_callback = NULL;
+static beam_restore_callback_t restore_callback = NULL;
 static TaskHandle_t monitor_task_handle = NULL;
 static bool monitoring_active = false;
 
@@ -74,6 +75,10 @@ static void sensor_monitor_task(void *arg)
                         // Beam restored
                         current_status = SENSOR_BEAM_DETECTED;
                         ESP_LOGI(TAG, "Beam restored. ADC: %d", adc_value);
+                        
+                        if (restore_callback) {
+                            restore_callback(adc_chan);
+                        }
                     }
                 }
             }
@@ -124,6 +129,16 @@ esp_err_t sensor_register_callback(beam_break_callback_t callback)
 {
     break_callback = callback;
     ESP_LOGI(TAG, "Beam break callback registered");
+    return ESP_OK;
+}
+
+/**
+ * Register beam restore callback
+ */
+esp_err_t sensor_register_restore_callback(beam_restore_callback_t callback)
+{
+    restore_callback = callback;
+    ESP_LOGI(TAG, "Beam restore callback registered");
     return ESP_OK;
 }
 
