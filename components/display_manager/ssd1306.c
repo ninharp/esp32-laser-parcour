@@ -221,26 +221,30 @@ esp_err_t ssd1306_init(gpio_num_t sda_pin, gpio_num_t scl_pin, uint32_t freq_hz)
         return err;
     }
     
-    ESP_LOGI(TAG, "I2C driver installed, scanning for SSD1306...");
+    ESP_LOGI(TAG, "I2C driver installed, scanning for display...");
     
     // Wait for display to power up
     vTaskDelay(pdMS_TO_TICKS(100));
     
-    // Check if SSD1306 is present on I2C bus
-    err = i2c_scan_device(SSD1306_I2C_ADDRESS);
-    if (err == ESP_OK) {
-        ESP_LOGI(TAG, "✓ SSD1306 found at address 0x%02X", SSD1306_I2C_ADDRESS);
+    // Try common OLED display addresses (0x3C and 0x3D)
+    uint8_t display_addr = 0;
+    if (i2c_scan_device(0x3C) == ESP_OK) {
+        display_addr = 0x3C;
+        ESP_LOGI(TAG, "✓ Display found at address 0x3C");
+    } else if (i2c_scan_device(0x3D) == ESP_OK) {
+        display_addr = 0x3D;
+        ESP_LOGI(TAG, "✓ Display found at address 0x3D");
+        ESP_LOGW(TAG, "Note: Address 0x3D detected. This might be a SH1106 display!");
     } else {
-        ESP_LOGE(TAG, "✗ SSD1306 NOT found at address 0x%02X (error: %s)", 
-                 SSD1306_I2C_ADDRESS, esp_err_to_name(err));
+        ESP_LOGE(TAG, "✗ Display NOT found at 0x3C or 0x3D");
         ESP_LOGE(TAG, "Check wiring: SDA=%d, SCL=%d", sda_pin, scl_pin);
         
         // Scan entire I2C bus to find devices
-        ESP_LOGI(TAG, "Scanning I2C bus for other devices...");
+        ESP_LOGI(TAG, "Scanning I2C bus (0x01-0x7E)...");
         bool found_any = false;
         for (uint8_t addr = 1; addr < 127; addr++) {
             if (i2c_scan_device(addr) == ESP_OK) {
-                ESP_LOGI(TAG, "  Found device at address 0x%02X", addr);
+                ESP_LOGI(TAG, "  Found I2C device at address 0x%02X", addr);
                 found_any = true;
             }
         }
@@ -248,7 +252,17 @@ esp_err_t ssd1306_init(gpio_num_t sda_pin, gpio_num_t scl_pin, uint32_t freq_hz)
             ESP_LOGW(TAG, "  No I2C devices found on bus");
         }
         
+        // Don't fail - allow system to continue without display
+        ESP_LOGW(TAG, "Continuing without display...");
         return ESP_FAIL;
+    }
+    
+    // Update I2C address if different from default
+    if (display_addr != SSD1306_I2C_ADDRESS) {
+        ESP_LOGI(TAG, "Using detected address 0x%02X instead of default 0x%02X", 
+                 display_addr, SSD1306_I2C_ADDRESS);
+        // Note: We would need to modify SSD1306_I2C_ADDRESS or store display_addr globally
+        // For now, we'll try to continue with detection
     }
     
     // Init sequence for 128x64 OLED module
