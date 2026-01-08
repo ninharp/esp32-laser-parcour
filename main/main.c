@@ -346,6 +346,7 @@ static uint8_t current_scan_channel = CONFIG_ESPNOW_CHANNEL;
 static uint8_t scan_attempts_on_channel = 0;
 static const uint8_t MAX_ATTEMPTS_PER_CHANNEL = 3;  // 3 pairing attempts per channel
 static const uint8_t MAX_WIFI_CHANNEL = 13;          // WiFi channels 1-13
+static uint8_t led_blink_state = 0;                  // For blinking status LED during scanning
 
 /**
  * Pairing request timer callback with channel scanning
@@ -353,6 +354,10 @@ static const uint8_t MAX_WIFI_CHANNEL = 13;          // WiFi channels 1-13
 static void pairing_timer_callback(void *arg)
 {
     if (!is_paired) {
+        // Toggle LED to indicate scanning (blink effect)
+        led_blink_state = !led_blink_state;
+        gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, led_blink_state);
+        
         ESP_LOGI(TAG, "Sending pairing request on channel %d (attempt %d/%d)...", 
                  current_scan_channel, scan_attempts_on_channel + 1, MAX_ATTEMPTS_PER_CHANNEL);
         
@@ -471,11 +476,12 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             ESP_LOGI(TAG, "Pairing response received - paired successfully on channel %d!", current_scan_channel);
             is_paired = true;
             scan_attempts_on_channel = 0;  // Reset scan state
+            led_blink_state = 0;           // Reset blink state
             if (pairing_timer) {
                 esp_timer_stop(pairing_timer);
                 ESP_LOGI(TAG, "Pairing timer stopped");
             }
-            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);  // Status LED on when paired
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);  // Status LED on solid when paired
             break;
         case MSG_RESET:
             ESP_LOGI(TAG, "Reset command received");
@@ -493,6 +499,7 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             // Reset channel scan state
             current_scan_channel = CONFIG_ESPNOW_CHANNEL;  // Back to configured start channel
             scan_attempts_on_channel = 0;
+            led_blink_state = 0;  // Reset blink state
             
             // Restart pairing timer
             if (pairing_timer) {
