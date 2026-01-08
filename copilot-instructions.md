@@ -1100,6 +1100,56 @@ laser_unit_count = active_count;  // Update to reflect removals
 - Webinterface zeigt nur aktive/erreichbare Units
 - Automatische Bereinigung nach 1 Minute Inaktivität
 
+### Heartbeat ESP-NOW Interface Fix (2025-01-08)
+
+**Problem:** Heartbeats wurden gesendet aber nicht empfangen, Units gingen nach 15s offline
+
+**Ursache:**
+- Laser Units sendeten Heartbeats als **Broadcast** (`espnow_broadcast_message`)
+- Main Unit im **APSTA-Modus** (AP + STA gleichzeitig)
+- Laser Units im **STA-Modus**
+- ESP-NOW Broadcasts über WIFI_IF_STA werden nicht zuverlässig von APSTA-Geräten empfangen
+- Broadcast-Peer war nur für WIFI_IF_STA registriert, nicht für beide Interfaces
+
+**Lösung: Unicast Heartbeats an bekannte Main Unit MAC**
+
+1. **Globale Variable auf Laser Unit:**
+   ```c
+   static uint8_t main_unit_mac[6] = {0};  // MAC address of paired main unit
+   ```
+
+2. **MAC-Adresse speichern bei Pairing:**
+   ```c
+   case MSG_PAIRING_RESPONSE:
+       memcpy(main_unit_mac, sender_mac, 6);
+       ESP_LOGI(TAG, "Main unit MAC: %02X:%02X:%02X:%02X:%02X:%02X", ...);
+       espnow_add_peer(main_unit_mac, 0, 0);  // Add as peer for unicast
+   ```
+
+3. **Heartbeat als Unicast senden:**
+   ```c
+   static void heartbeat_timer_callback(void *arg)
+   {
+       if (is_paired) {
+           esp_err_t ret = espnow_send_message(main_unit_mac, MSG_HEARTBEAT, NULL, 0);
+           ESP_LOGI(TAG, "Heartbeat sent to main unit: %s", esp_err_to_name(ret));
+       }
+   }
+   ```
+
+**Code-Änderungen:**
+- `main/main.c` (Laser): Variable `main_unit_mac[6]` hinzugefügt
+- `main/main.c` (Laser): `heartbeat_timer_callback()` verwendet `espnow_send_message()` statt `espnow_broadcast_message()`
+- `main/main.c` (Laser): MSG_PAIRING_RESPONSE speichert MAC und fügt Main Unit als Peer hinzu
+- `main/main.c` (Main): MSG_HEARTBEAT Handler aktualisiert `last_seen` Timestamp
+
+**Ergebnis:**
+- ✅ Heartbeats kommen zuverlässig an (Unicast ist robust)
+- ✅ Units bleiben online (kein Flackern mehr)
+- ✅ Interface-Kompatibilität (APSTA ↔ STA funktioniert)
+- ✅ Direkte Punkt-zu-Punkt-Kommunikation statt Broadcast
+- ✅ Bessere Netzwerk-Performance (weniger Broadcast-Traffic)
+
 ### OLED Display Integration (2025-01-08)
 
 **Implementation:** Vollständige Display-Integration für Main Unit
@@ -1196,16 +1246,34 @@ display_manager/
 **Display Manager Delegation:**
 Der display_manager.c delegiert basierend auf CONFIG:
 ```c
-#ifdef CONFIG_OLED_SSD1306
+#ifdef CONFIG_ENABLE_DISPLAY
+  #ifdef CONFIG_OLED_SSD1306
     ssd1306_init(...);
-#elif defined(CONFIG_OLED_SH1106)
+  #elif defined(CONFIG_OLED_SH1106)
     sh1106_init(...);
+  #endif
+#else
+  // Stub implementations when CONFIG_ENABLE_DISPLAY not set
+  // Returns ESP_OK without hardware access
+  // Allows Laser Units to compile without display support
+#endif
+```
+
+**Stub-Implementation für Laser Units:**
+Wenn CONFIG_ENABLE_DISPLAY nicht gesetzt ist (z.B. auf Laser Units):
+```c
+#else // CONFIG_ENABLE_DISPLAY not defined
+esp_err_t display_manager_init(...) { return ESP_OK; }
+esp_err_t display_clear(void) { return ESP_OK; }
+esp_err_t display_update(void) { return ESP_OK; }
+// ... alle anderen Funktionen als leere Stubs
 #endif
 ```
 
 **Code-Änderungen:**
 - `display_manager/ssd1306.c/h`: Neuer SSD1306-Treiber
-- `display_manager/display_manager.c`: Abstrakte Schicht, ruft Treiber-Funktionen
+- `display_manager/display_manager.c`: Abstrakte Schicht mit CONFIG_ENABLE_DISPLAY ifdef
+- `display_manager/display_manager.c`: Stub-Implementierungen für Units ohne Display
 - `display_manager/CMakeLists.txt`: ssd1306.c zu SRCS hinzugefügt
 
 **Vorteile:**
@@ -1213,6 +1281,8 @@ Der display_manager.c delegiert basierend auf CONFIG:
 - ✅ Einfach erweiterbar (SH1106, SSD1327, etc.)
 - ✅ Konfigurierbar via menuconfig
 - ✅ Saubere Trennung: Interface ↔ Hardware
+- ✅ Laser Units kompilieren ohne Display-Code (Stubs)
+- ✅ Kein Dead-Code auf Laser Units
 
 ---
 
