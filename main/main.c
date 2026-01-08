@@ -350,13 +350,27 @@ static void init_main_unit(void)
 static bool is_paired = false;
 static esp_timer_handle_t pairing_timer = NULL;
 static esp_timer_handle_t heartbeat_timer = NULL;
+static esp_timer_handle_t led_blink_timer = NULL;
 
 // Channel scanning state
 static uint8_t current_scan_channel = CONFIG_ESPNOW_CHANNEL;
 static uint8_t scan_attempts_on_channel = 0;
-static const uint8_t MAX_ATTEMPTS_PER_CHANNEL = 3;  // 3 pairing attempts per channel
+static const uint8_t MAX_ATTEMPTS_PER_CHANNEL = 1;  // 1 pairing attempt per channel (fast scan)
 static const uint8_t MAX_WIFI_CHANNEL = 13;          // WiFi channels 1-13
 static uint8_t led_blink_state = 0;                  // For blinking status LED during scanning
+
+/**
+ * LED blink timer callback (Laser Unit)
+ * Fast blink during pairing search
+ */
+static void led_blink_timer_callback(void *arg)
+{
+    if (!is_paired) {
+        // Toggle LED for visual feedback during pairing
+        led_blink_state = !led_blink_state;
+        gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, led_blink_state);
+    }
+}
 
 /**
  * Heartbeat timer callback (Laser Unit)
@@ -379,12 +393,7 @@ static void heartbeat_timer_callback(void *arg)
 static void pairing_timer_callback(void *arg)
 {
     if (!is_paired) {
-        // Toggle LED to indicate scanning (blink effect)
-        led_blink_state = !led_blink_state;
-        gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, led_blink_state);
-        
-        ESP_LOGI(TAG, "Sending pairing request on channel %d (attempt %d/%d)...", 
-                 current_scan_channel, scan_attempts_on_channel + 1, MAX_ATTEMPTS_PER_CHANNEL);
+        ESP_LOGI(TAG, "Sending pairing request on channel %d...", current_scan_channel);
         
         espnow_broadcast_message(MSG_PAIRING_REQUEST, NULL, 0);
         scan_attempts_on_channel++;
@@ -513,6 +522,12 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
                 ESP_LOGI(TAG, "Pairing timer stopped: %s", esp_err_to_name(ret));
             }
             
+            // Stop LED blink timer
+            if (led_blink_timer && esp_timer_is_active(led_blink_timer)) {
+                esp_timer_stop(led_blink_timer);
+                ESP_LOGI(TAG, "LED blink timer stopped");
+            }
+            
             // Start heartbeat timer (3 seconds)
             if (heartbeat_timer) {
                 if (!esp_timer_is_active(heartbeat_timer)) {
@@ -553,8 +568,14 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             
             // Restart pairing timer
             if (pairing_timer) {
-                esp_timer_start_periodic(pairing_timer, 5000000); // 5 seconds
+                esp_timer_start_periodic(pairing_timer, 1500000); // 1.5 seconds
                 ESP_LOGI(TAG, "Pairing timer restarted, will scan from channel %d", current_scan_channel);
+            }
+            
+            // Restart LED blink timer
+            if (led_blink_timer) {
+                esp_timer_start_periodic(led_blink_timer, 500000);  // 500ms
+                ESP_LOGI(TAG, "LED blink timer restarted");
             }
             ESP_LOGI(TAG, "Module reset complete");
             break;
@@ -615,14 +636,23 @@ static void init_laser_unit(void)
     ESP_LOGI(TAG, "  Initializing ESP-NOW (Channel: %d)", CONFIG_ESPNOW_CHANNEL);
     ESP_ERROR_CHECK(espnow_manager_init(CONFIG_ESPNOW_CHANNEL, espnow_recv_callback_laser));
     
-    // Set up periodic pairing request timer (every 5 seconds until paired)
+    // Set up periodic pairing request timer (every 1.5 seconds until paired)
     ESP_LOGI(TAG, "  Setting up pairing request timer");
     const esp_timer_create_args_t pairing_timer_args = {
         .callback = &pairing_timer_callback,
         .name = "pairing_timer"
     };
     ESP_ERROR_CHECK(esp_timer_create(&pairing_timer_args, &pairing_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(pairing_timer, 5000000));  // 5 seconds in microseconds
+    ESP_ERROR_CHECK(esp_timer_start_periodic(pairing_timer, 1500000));  // 1.5 seconds
+    
+    // Set up LED blink timer for visual feedback during pairing
+    ESP_LOGI(TAG, "  Setting up LED blink timer");
+    const esp_timer_create_args_t led_blink_timer_args = {
+        .callback = &led_blink_timer_callback,
+        .name = "led_blink_timer"
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&led_blink_timer_args, &led_blink_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(led_blink_timer, 500000));  // 500ms (fast blink)
     
     // Set up heartbeat timer (starts after successful pairing)
     ESP_LOGI(TAG, "  Setting up heartbeat timer");
