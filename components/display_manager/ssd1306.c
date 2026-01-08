@@ -323,14 +323,14 @@ esp_err_t ssd1306_init(gpio_num_t sda_pin, gpio_num_t scl_pin, uint32_t freq_hz)
     
     // Display rotation (CONFIG_DISPLAY_ROTATION_180)
 #ifdef CONFIG_DISPLAY_ROTATION_180
-    // 180° rotation
-    write_command(SSD1306_CMD_SEG_REMAP | 0x00);  // Column address 0 is mapped to SEG0
-    write_command(SSD1306_CMD_COM_SCAN_INC);       // Scan from COM0 to COM[N-1]
+    // 180° rotation: flip both horizontal and vertical
+    write_command(0xA0);                           // SEG remap: column 0 mapped to SEG0
+    write_command(SSD1306_CMD_COM_SCAN_INC);       // COM scan: from COM0 to COM[N-1]
     ESP_LOGI(TAG, "Display rotation: 180°");
 #else
     // Normal orientation (0°)
-    write_command(SSD1306_CMD_SEG_REMAP | 0x01);  // Column address 127 is mapped to SEG0
-    write_command(SSD1306_CMD_COM_SCAN_DEC);       // Scan from COM[N-1] to COM0
+    write_command(0xA1);                           // SEG remap: column 127 mapped to SEG0
+    write_command(SSD1306_CMD_COM_SCAN_DEC);       // COM scan: from COM[N-1] to COM0
     ESP_LOGI(TAG, "Display rotation: 0°");
 #endif
     
