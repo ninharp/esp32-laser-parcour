@@ -17,7 +17,7 @@ static const char *TAG = "SENSOR_MGR";
 
 static adc_oneshot_unit_handle_t adc_handle = NULL;
 static adc_channel_t adc_chan;
-static uint16_t detection_threshold = 500;
+static uint16_t detection_threshold = 2000;  // For LDR: no laser ~850, with laser ~4095
 static uint32_t debounce_time_ms = 100;
 static sensor_status_t current_status = SENSOR_BEAM_DETECTED;
 static beam_break_callback_t break_callback = NULL;
@@ -31,8 +31,10 @@ static void sensor_monitor_task(void *arg)
 {
     uint32_t last_break_time = 0;
     bool last_state = true; // true = beam detected
+    uint32_t last_log_time = 0;
     
     ESP_LOGI(TAG, "Sensor monitoring task started");
+    ESP_LOGI(TAG, "Threshold: %d (ADC values above this = beam present)", detection_threshold);
     
     while (monitoring_active) {
         int adc_value = 0;
@@ -40,6 +42,14 @@ static void sensor_monitor_task(void *arg)
         
         if (err == ESP_OK) {
             bool beam_present = (adc_value > detection_threshold);
+            
+            // Log ADC value every second for debugging
+            uint32_t current_time = xTaskGetTickCount() * portTICK_PERIOD_MS;
+            if (current_time - last_log_time > 1000) {
+                ESP_LOGI(TAG, "ADC: %d | Threshold: %d | Beam: %s", 
+                         adc_value, detection_threshold, beam_present ? "PRESENT" : "BROKEN");
+                last_log_time = current_time;
+            }
             
             // Check for state change
             if (beam_present != last_state) {

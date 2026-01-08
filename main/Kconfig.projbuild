@@ -284,11 +284,12 @@ menu "Laser Parcour Configuration"
         config SENSOR_THRESHOLD
             int "Beam Detection Threshold"
             range 0 4095
-            default 500
+            default 2000
             depends on MODULE_ROLE_LASER
             help
                 ADC threshold for detecting beam break (0-4095, 12-bit ADC).
-                Lower values = more sensitive. Adjust based on ambient light.
+                For LDR with laser: Set between no-laser value (~850) and laser value (~4095).
+                Recommended: 2000. ADC above threshold = beam present, below = beam broken.
 
         config DEBOUNCE_TIME
             int "Debounce Time (ms)"

@@ -484,10 +484,13 @@ esp_err_t sensor_stop_monitoring(void)
 
 **Features:**
 - 12-bit ADC Auflösung (0-4095)
-- Konfigurierbarer Threshold
+- Konfigurierbarer Threshold (default: 2000)
+- **Logik:** ADC-Wert **über** Threshold = Beam vorhanden, **unter** Threshold = Beam gebrochen
+- **LDR-Setup:** Ohne Laser ~0.7V (~850 ADC), mit Laser ~3.3V (~4095 ADC)
 - Debouncing (Anti-Flackern)
 - Callback-basierte Events
 - Automatische Kalibrierung
+- Live ADC-Wert Logging (jede Sekunde) für Debugging
 
 **Dependencies:** `driver` (ADC), `esp_adc`
 
@@ -718,6 +721,29 @@ CONFIG_SENSOR_LED_RED_PIN=2
 - `web_server/web_server.c`: Echte Game-Daten in status_handler()
 - `web_server/web_server.c`: Alert-Boxen entfernt, nur console.log
 - `web_server/web_server.c`: esp_timer.h Include hinzugefügt
+
+**Code-Änderungen (2025-01-08):**
+- `sensor_manager/sensor_manager.c`: Default Threshold von 500 auf 2000 erhöht
+- `sensor_manager/sensor_manager.c`: Live ADC-Logging jede Sekunde hinzugefügt
+- `main/Kconfig.projbuild`: SENSOR_THRESHOLD default auf 2000, bessere Dokumentation
+
+### Sensor Detection Threshold
+
+**Problem:** Laser Breaks wurden nicht erkannt trotz funktionierendem Laser
+**Ursache:** Default Threshold von 500 war zu niedrig für LDR-Setup
+**LDR Verhalten:**
+- Ohne Laser (dunkel): ~0.7V = ~850 ADC-Wert
+- Mit Laser (hell): ~3.3V = ~4095 ADC-Wert
+- Logik: ADC > Threshold = Beam vorhanden, ADC < Threshold = Beam gebrochen
+
+**Lösung:**
+- Default Threshold auf 2000 erhöht (zwischen 850 und 4095)
+- Live ADC-Logging jede Sekunde für einfaches Debugging
+- Kconfig Dokumentation verbessert
+
+**Debugging:**
+Monitor-Logs zeigen nun: `ADC: 850 | Threshold: 2000 | Beam: BROKEN`
+Bei anliegendem Laser: `ADC: 4095 | Threshold: 2000 | Beam: PRESENT`
 
 ---
 
