@@ -340,8 +340,12 @@ static void init_main_unit(void)
     if (CONFIG_I2C_SDA_PIN != -1 && CONFIG_I2C_SCL_PIN != -1) {
         ESP_LOGI(TAG, "  Initializing OLED Display (I2C SDA:%d SCL:%d)", 
                  CONFIG_I2C_SDA_PIN, CONFIG_I2C_SCL_PIN);
-        ESP_ERROR_CHECK(display_manager_init(CONFIG_I2C_SDA_PIN, CONFIG_I2C_SCL_PIN, CONFIG_I2C_FREQUENCY));
-        display_set_screen(SCREEN_IDLE);
+        esp_err_t display_ret = display_manager_init(CONFIG_I2C_SDA_PIN, CONFIG_I2C_SCL_PIN, CONFIG_I2C_FREQUENCY);
+        if (display_ret == ESP_OK) {
+            display_set_screen(SCREEN_IDLE);
+        } else {
+            ESP_LOGW(TAG, "  Display initialization failed, continuing without display");
+        }
     } else {
         ESP_LOGI(TAG, "  Display disabled (pin = -1)");
     }
@@ -649,22 +653,24 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
         case MSG_LASER_ON:
             ESP_LOGI(TAG, "Laser ON command (manual)");
             laser_turn_on(message->data[0]);  // Intensity in data[0]
+            // Turn off status LED during manual laser operation
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
             // Manual laser on: both green and red LEDs on (only if not in game mode)
             if (!is_game_mode) {
                 gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 1);
                 gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 1);
             }
-            // Status LED stays on (connected)
             break;
         case MSG_LASER_OFF:
             ESP_LOGI(TAG, "Laser OFF command (manual)");
             laser_turn_off();
+            // Turn status LED back on (connected state)
+            gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 1);
             // Turn off manual laser LEDs (only if not in game mode)
             if (!is_game_mode) {
                 gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
                 gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
             }
-            // Status LED stays on (connected)
             break;
         case MSG_HEARTBEAT:
             // Ignore heartbeat messages (we send them, don't need to process them)
