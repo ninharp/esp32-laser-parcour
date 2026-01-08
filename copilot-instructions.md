@@ -769,10 +769,30 @@ player_data->elapsed_time = raw_elapsed + total_penalty_time;
 ```c
 // Bei Beam-Break in game_beam_broken():
 total_penalty_time += (configuration.penalty_time * 1000);  // SOFORT addiert
+penalty_start_time = jetzt;  // Penalty-Phase neu starten
 
 // In game_get_player_data():
 player_data->elapsed_time = raw_elapsed + total_penalty_time;  // Penalty ist bereits enthalten
+
+// Penalty-Phase wechselt automatisch nach penalty_time zurück zu RUNNING
+if (penalty_elapsed >= penalty_duration) {
+    current_state = GAME_STATE_RUNNING;
+}
 ```
+
+**Penalty-Phase Verhalten:**
+- Jeder Beam Break startet eine neue Penalty-Phase (z.B. 15 Sekunden)
+- Während der Penalty-Phase können weitere Beam Breaks registriert werden
+- Jeder weitere Break addiert erneut Penalty-Zeit UND startet die Phase neu
+- Display zeigt PENALTY State während der Phase
+- Nach Ablauf automatischer Wechsel zu RUNNING (via game_get_player_data polling)
+
+**Beispiel - Multiple Breaks:**
+1. Zeit 0:30: Beam Break #1 → Zeit springt auf 0:45, PENALTY-Phase startet (15s)
+2. Zeit 0:35: Beam Break #2 → Zeit springt auf 1:00, PENALTY-Phase startet NEU (15s)
+3. Zeit 0:40: Beam Break #3 → Zeit springt auf 1:15, PENALTY-Phase startet NEU (15s)
+4. Zeit 0:55: Penalty-Phase endet → Zurück zu RUNNING
+5. Endergebnis: 3 Breaks, 45 Sekunden Penalty-Zeit addiert
 
 **Beispiel-Spielablauf mit Max-Zeit:**
 1. Start: Zeit = 0:00, max_time = 180 (3 Minuten)

@@ -251,7 +251,8 @@ esp_err_t game_beam_broken(uint8_t sensor_id)
         return ESP_FAIL;
     }
     
-    if (current_state != GAME_STATE_RUNNING) {
+    // Accept beam breaks in RUNNING and PENALTY state
+    if (current_state != GAME_STATE_RUNNING && current_state != GAME_STATE_PENALTY) {
         xSemaphoreGive(game_mutex);
         return ESP_FAIL;
     }
@@ -259,16 +260,16 @@ esp_err_t game_beam_broken(uint8_t sensor_id)
     // Increment beam break counter
     current_player.beam_breaks++;
     
-    // Enter penalty state (unless in training mode)
+    // Enter/restart penalty state (unless in training mode)
     if (configuration.mode != GAME_MODE_TRAINING) {
         current_state = GAME_STATE_PENALTY;
-        penalty_start_time = (uint32_t)(esp_timer_get_time() / 1000);
+        penalty_start_time = (uint32_t)(esp_timer_get_time() / 1000);  // Restart penalty timer
         
         // SOFORT die volle Penalty-Zeit zur Gesamtzeit addieren
         uint32_t penalty_duration_ms = configuration.penalty_time * 1000;
         total_penalty_time += penalty_duration_ms;
         
-        ESP_LOGI(TAG, "Beam broken! Sensor: %d, Total breaks: %d, Penalty: %lu seconds (added immediately)", 
+        ESP_LOGI(TAG, "Beam broken! Sensor: %d, Total breaks: %d, Penalty: %lu seconds (added immediately, penalty phase restarted)", 
                  sensor_id, current_player.beam_breaks, configuration.penalty_time);
     } else {
         ESP_LOGI(TAG, "Beam broken! Sensor: %d, Total breaks: %d (Training mode - no penalty)", 
