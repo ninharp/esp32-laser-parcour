@@ -179,6 +179,20 @@ static esp_err_t write_data(uint8_t *data, size_t len)
 }
 
 /**
+ * Scan I2C bus for device at address
+ */
+static esp_err_t i2c_scan_device(uint8_t addr)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_stop(cmd);
+    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(50));
+    i2c_cmd_link_delete(cmd);
+    return ret;
+}
+
+/**
  * Initialize SSD1306 display
  */
 esp_err_t ssd1306_init(gpio_num_t sda_pin, gpio_num_t scl_pin, uint32_t freq_hz)
@@ -207,10 +221,38 @@ esp_err_t ssd1306_init(gpio_num_t sda_pin, gpio_num_t scl_pin, uint32_t freq_hz)
         return err;
     }
     
+    ESP_LOGI(TAG, "I2C driver installed, scanning for SSD1306...");
+    
     // Wait for display to power up
     vTaskDelay(pdMS_TO_TICKS(100));
     
+    // Check if SSD1306 is present on I2C bus
+    err = i2c_scan_device(SSD1306_I2C_ADDRESS);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "✓ SSD1306 found at address 0x%02X", SSD1306_I2C_ADDRESS);
+    } else {
+        ESP_LOGE(TAG, "✗ SSD1306 NOT found at address 0x%02X (error: %s)", 
+                 SSD1306_I2C_ADDRESS, esp_err_to_name(err));
+        ESP_LOGE(TAG, "Check wiring: SDA=%d, SCL=%d", sda_pin, scl_pin);
+        
+        // Scan entire I2C bus to find devices
+        ESP_LOGI(TAG, "Scanning I2C bus for other devices...");
+        bool found_any = false;
+        for (uint8_t addr = 1; addr < 127; addr++) {
+            if (i2c_scan_device(addr) == ESP_OK) {
+                ESP_LOGI(TAG, "  Found device at address 0x%02X", addr);
+                found_any = true;
+            }
+        }
+        if (!found_any) {
+            ESP_LOGW(TAG, "  No I2C devices found on bus");
+        }
+        
+        return ESP_FAIL;
+    }
+    
     // Init sequence for 128x64 OLED module
+    ESP_LOGI(TAG, "Sending initialization sequence...");
     write_command(SSD1306_CMD_DISPLAY_OFF);
     write_command(SSD1306_CMD_SET_DISPLAY_CLK_DIV);
     write_command(0x80);
