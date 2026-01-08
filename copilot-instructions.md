@@ -769,30 +769,36 @@ player_data->elapsed_time = raw_elapsed + total_penalty_time;
 ```c
 // Bei Beam-Break in game_beam_broken():
 total_penalty_time += (configuration.penalty_time * 1000);  // SOFORT addiert
-penalty_start_time = jetzt;  // Penalty-Phase neu starten
+penalty_start_time = jetzt;  // Penalty-Display startet (3 Sekunden)
 
 // In game_get_player_data():
 player_data->elapsed_time = raw_elapsed + total_penalty_time;  // Penalty ist bereits enthalten
 
-// Penalty-Phase wechselt automatisch nach penalty_time zurück zu RUNNING
-if (penalty_elapsed >= penalty_duration) {
+// Penalty-Display wechselt automatisch nach 3 Sekunden zurück zu RUNNING
+if (penalty_elapsed >= PENALTY_DISPLAY_TIME_MS) {  // 3000ms = 3 Sekunden
     current_state = GAME_STATE_RUNNING;
 }
 ```
 
-**Penalty-Phase Verhalten:**
-- Jeder Beam Break startet eine neue Penalty-Phase (z.B. 15 Sekunden)
-- Während der Penalty-Phase können weitere Beam Breaks registriert werden
-- Jeder weitere Break addiert erneut Penalty-Zeit UND startet die Phase neu
-- Display zeigt PENALTY State während der Phase
-- Nach Ablauf automatischer Wechsel zu RUNNING (via game_get_player_data polling)
+**Penalty-Phase Verhalten (NUR Display-Anzeige):**
+- PENALTY ist **keine echte Spielphase**, sondern nur eine **visuelle Bestrafungs-Anzeige**
+- Die Penalty-Zeit (z.B. 15 Sekunden) wird **sofort zur Gesamtzeit addiert**
+- Display zeigt "*** PENALTY! ***" für **3 Sekunden** (fest eingestellt)
+- Nach 3 Sekunden automatischer Wechsel zu RUNNING
+- **Während der 3-Sekunden-Anzeige können KEINE weiteren Beam Breaks registriert werden** (blockiert)
+- Dies verhindert mehrere Penalties bei schnellen Mehrfach-Breaks
 
-**Beispiel - Multiple Breaks:**
-1. Zeit 0:30: Beam Break #1 → Zeit springt auf 0:45, PENALTY-Phase startet (15s)
-2. Zeit 0:35: Beam Break #2 → Zeit springt auf 1:00, PENALTY-Phase startet NEU (15s)
-3. Zeit 0:40: Beam Break #3 → Zeit springt auf 1:15, PENALTY-Phase startet NEU (15s)
-4. Zeit 0:55: Penalty-Phase endet → Zurück zu RUNNING
-5. Endergebnis: 3 Breaks, 45 Sekunden Penalty-Zeit addiert
+**Beispiel - Penalty-Ablauf:**
+1. Zeit 0:30: Beam Break → Zeit springt sofort auf 0:45 (+15s Penalty addiert)
+2. Display zeigt 3 Sekunden lang "*** PENALTY! ***" mit Zeit und Breaks
+3. Nach 3 Sekunden: Display wechselt zurück zu "GAME ACTIVE"
+4. Weitere Beam Breaks sind wieder möglich
+
+**Display bei GAME_STATE_COMPLETE:**
+- Zeigt "GAME COMPLETE!"
+- Gesamtzeit im Format MM:SS.ms (inklusive aller Penalties)
+- Anzahl der Beam Breaks
+- Diese Werte bleiben dauerhaft sichtbar bis zum nächsten Spiel
 
 **Beispiel-Spielablauf mit Max-Zeit:**
 1. Start: Zeit = 0:00, max_time = 180 (3 Minuten)

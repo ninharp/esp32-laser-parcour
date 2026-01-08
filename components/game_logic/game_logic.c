@@ -34,6 +34,7 @@ static game_config_t configuration = {
 // Penalty tracking
 static uint32_t penalty_start_time = 0;
 static uint32_t total_penalty_time = 0;  // Accumulated penalty time in ms
+#define PENALTY_DISPLAY_TIME_MS 3000  // Show PENALTY state for 3 seconds
 
 // Mutex for thread-safe access
 static SemaphoreHandle_t game_mutex = NULL;
@@ -251,8 +252,8 @@ esp_err_t game_beam_broken(uint8_t sensor_id)
         return ESP_FAIL;
     }
     
-    // Accept beam breaks in RUNNING and PENALTY state
-    if (current_state != GAME_STATE_RUNNING && current_state != GAME_STATE_PENALTY) {
+    // Only accept beam breaks in RUNNING state (not during PENALTY display)
+    if (current_state != GAME_STATE_RUNNING) {
         xSemaphoreGive(game_mutex);
         return ESP_FAIL;
     }
@@ -260,16 +261,16 @@ esp_err_t game_beam_broken(uint8_t sensor_id)
     // Increment beam break counter
     current_player.beam_breaks++;
     
-    // Enter/restart penalty state (unless in training mode)
+    // Enter penalty display state (unless in training mode)
     if (configuration.mode != GAME_MODE_TRAINING) {
         current_state = GAME_STATE_PENALTY;
-        penalty_start_time = (uint32_t)(esp_timer_get_time() / 1000);  // Restart penalty timer
+        penalty_start_time = (uint32_t)(esp_timer_get_time() / 1000);  // Start penalty display timer
         
         // SOFORT die volle Penalty-Zeit zur Gesamtzeit addieren
         uint32_t penalty_duration_ms = configuration.penalty_time * 1000;
         total_penalty_time += penalty_duration_ms;
         
-        ESP_LOGI(TAG, "Beam broken! Sensor: %d, Total breaks: %d, Penalty: %lu seconds (added immediately, penalty phase restarted)", 
+        ESP_LOGI(TAG, "Beam broken! Sensor: %d, Total breaks: %d, Penalty: %lu seconds (added immediately, showing penalty for 3s)", 
                  sensor_id, current_player.beam_breaks, configuration.penalty_time);
     } else {
         ESP_LOGI(TAG, "Beam broken! Sensor: %d, Total breaks: %d (Training mode - no penalty)", 
@@ -302,17 +303,16 @@ esp_err_t game_get_player_data(player_data_t *player_data)
         return ESP_FAIL;
     }
     
-    // Check if penalty period has expired and return to RUNNING
+    // Check if penalty display period has expired and return to RUNNING
     if (current_state == GAME_STATE_PENALTY && penalty_start_time > 0) {
         uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
         uint32_t penalty_elapsed = now - penalty_start_time;
-        uint32_t penalty_duration = configuration.penalty_time * 1000; // Convert to ms
         
-        if (penalty_elapsed >= penalty_duration) {
-            // Penalty period over, return to RUNNING (Zeit wurde bereits bei Beam-Break addiert)
+        if (penalty_elapsed >= PENALTY_DISPLAY_TIME_MS) {
+            // Penalty display over (3s), return to RUNNING (Zeit wurde bereits bei Beam-Break addiert)
             penalty_start_time = 0;
             current_state = GAME_STATE_RUNNING;
-            ESP_LOGI(TAG, "Penalty period ended, returning to RUNNING state");
+            ESP_LOGI(TAG, "Penalty display ended, returning to RUNNING state");
         }
     }
     
