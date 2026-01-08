@@ -431,6 +431,9 @@ esp_err_t game_get_laser_units(laser_unit_info_t *units, size_t max_units, size_
         if (now - laser_units[i].last_seen > 5000) {
             laser_units[i].is_online = false;
             snprintf(laser_units[i].status, sizeof(laser_units[i].status), "Offline");
+        } else {
+            laser_units[i].is_online = true;
+            snprintf(laser_units[i].status, sizeof(laser_units[i].status), "Online");
         }
     }
     
