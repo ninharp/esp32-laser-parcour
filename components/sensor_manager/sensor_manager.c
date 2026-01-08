@@ -84,7 +84,7 @@ static void sensor_monitor_task(void *arg)
             }
         }
         
-        vTaskDelay(pdMS_TO_TICKS(10)); // Sample every 10ms
+        vTaskDelay(pdMS_TO_TICKS(1)); // Sample every 1ms
     }
     
     ESP_LOGI(TAG, "Sensor monitoring task stopped");
