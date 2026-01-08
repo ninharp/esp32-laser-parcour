@@ -296,11 +296,8 @@ static void init_main_unit(void)
     
     // Initialize WiFi (required for ESP-NOW and web server)
     ESP_LOGI(TAG, "  Initializing WiFi in APSTA mode");
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-    ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "  WiFi started in APSTA mode");
+    ESP_ERROR_CHECK(wifi_apsta_init());
+    ESP_LOGI(TAG, "  WiFi started in APSTA mode with STA and AP netif");
     
     // Initialize WiFi with automatic fallback
     // Try to connect to saved WiFi, if fails -> start AP mode

@@ -68,6 +68,14 @@ typedef struct {
 esp_err_t wifi_ap_init(const laser_ap_config_t *config);
 
 /**
+ * Initialize WiFi in APSTA mode (for ESP-NOW + Web Server)
+ * Creates both AP and STA netif instances
+ * 
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t wifi_apsta_init(void);
+
+/**
  * Deinitialize WiFi Access Point
  * 
  * @return ESP_OK on success, error code otherwise

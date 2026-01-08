@@ -153,6 +153,76 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 }
 
 /**
+ * Initialize WiFi in APSTA mode
+ * Creates both AP and STA netif instances for simultaneous operation
+ */
+esp_err_t wifi_apsta_init(void)
+{
+    ESP_LOGI(TAG, "Initializing WiFi in APSTA mode...");
+    
+    // Create WiFi event group if not exists
+    if (!wifi_event_group) {
+        wifi_event_group = xEventGroupCreate();
+    }
+
+    // Create STA netif
+    if (!sta_netif) {
+        sta_netif = esp_netif_create_default_wifi_sta();
+        if (!sta_netif) {
+            ESP_LOGE(TAG, "Failed to create STA netif");
+            return ESP_FAIL;
+        }
+        ESP_LOGI(TAG, "Created STA netif");
+    }
+    
+    // Create AP netif
+    if (!ap_netif) {
+        ap_netif = esp_netif_create_default_wifi_ap();
+        if (!ap_netif) {
+            ESP_LOGE(TAG, "Failed to create AP netif");
+            return ESP_FAIL;
+        }
+        ESP_LOGI(TAG, "Created AP netif");
+    }
+
+    // Initialize WiFi if not already done
+    if (!is_initialized) {
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        esp_err_t ret = esp_wifi_init(&cfg);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "WiFi init failed: %s", esp_err_to_name(ret));
+            return ret;
+        }
+        
+        // Register event handlers
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                            ESP_EVENT_ANY_ID,
+                                                            &wifi_event_handler,
+                                                            NULL,
+                                                            NULL));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                            IP_EVENT_STA_GOT_IP,
+                                                            &wifi_event_handler,
+                                                            NULL,
+                                                            NULL));
+    }
+
+    // Set WiFi mode to APSTA
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+    
+    // Start WiFi
+    if (!is_initialized) {
+        ESP_ERROR_CHECK(esp_wifi_start());
+        is_initialized = true;
+    }
+
+    current_mode = WIFI_MANAGER_MODE_APSTA;
+    ESP_LOGI(TAG, "WiFi APSTA mode initialized successfully");
+    
+    return ESP_OK;
+}
+
+/**
  * Initialize WiFi Access Point
  */
 esp_err_t wifi_ap_init(const laser_ap_config_t *config)
@@ -169,13 +239,16 @@ esp_err_t wifi_ap_init(const laser_ap_config_t *config)
         wifi_event_group = xEventGroupCreate();
     }
 
-    // Create default WiFi AP netif
+    // Create default WiFi AP netif only if it doesn't exist
     if (!ap_netif) {
         ap_netif = esp_netif_create_default_wifi_ap();
         if (!ap_netif) {
             ESP_LOGE(TAG, "Failed to create AP netif");
             return ESP_FAIL;
         }
+        ESP_LOGI(TAG, "Created AP netif");
+    } else {
+        ESP_LOGI(TAG, "AP netif already exists, reusing");
     }
 
     // Initialize WiFi if not already done
@@ -363,13 +436,17 @@ esp_err_t wifi_connect_sta(const char *ssid, const char *password, bool save_to_
         }
     }
     
-    // Create STA netif if not exists
+    // Create STA netif only if it doesn't exist
+    // In APSTA mode, this should already be created in main.c
     if (!sta_netif) {
         sta_netif = esp_netif_create_default_wifi_sta();
         if (!sta_netif) {
             ESP_LOGE(TAG, "Failed to create STA netif");
             return ESP_FAIL;
         }
+        ESP_LOGI(TAG, "Created STA netif");
+    } else {
+        ESP_LOGI(TAG, "STA netif already exists, reusing");
     }
     
     // Configure WiFi STA
