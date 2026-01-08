@@ -13,6 +13,10 @@
 #include <stdio.h>
 #include <string.h>
 
+static const char *TAG = "DISPLAY_MGR";
+
+#ifdef CONFIG_ENABLE_DISPLAY
+
 // Include driver based on configuration
 #ifdef CONFIG_OLED_SSD1306
 #include "ssd1306.h"
@@ -25,10 +29,8 @@
 #define DISPLAY_HEIGHT SH1106_HEIGHT
 #define DISPLAY_PAGES SH1106_PAGES
 #else
-#error "No display driver selected in menuconfig"
+#error "CONFIG_ENABLE_DISPLAY is set but no display driver selected (CONFIG_OLED_SSD1306 or CONFIG_OLED_SH1106)"
 #endif
-
-static const char *TAG = "DISPLAY_MGR";
 
 static bool initialized = false;
 static display_screen_t current_screen = SCREEN_IDLE;
@@ -303,3 +305,58 @@ esp_err_t display_power(bool on)
     
     return ESP_OK;
 }
+
+#else // CONFIG_ENABLE_DISPLAY not defined - provide stub implementations
+
+esp_err_t display_manager_init(gpio_num_t sda_pin, gpio_num_t scl_pin, uint32_t freq_hz)
+{
+    ESP_LOGD(TAG, "Display support disabled");
+    return ESP_OK;
+}
+
+esp_err_t display_clear(void)
+{
+    return ESP_OK;
+}
+
+esp_err_t display_update(void)
+{
+    return ESP_OK;
+}
+
+esp_err_t display_set_screen(display_screen_t screen)
+{
+    return ESP_OK;
+}
+
+esp_err_t display_game_status(uint32_t elapsed_time, uint16_t beam_breaks, int32_t score)
+{
+    return ESP_OK;
+}
+
+esp_err_t display_countdown(uint8_t seconds)
+{
+    return ESP_OK;
+}
+
+esp_err_t display_text(const char *message, uint8_t line)
+{
+    return ESP_OK;
+}
+
+esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks, int32_t final_score)
+{
+    return ESP_OK;
+}
+
+esp_err_t display_set_contrast(uint8_t contrast)
+{
+    return ESP_OK;
+}
+
+esp_err_t display_power(bool on)
+{
+    return ESP_OK;
+}
+
+#endif // CONFIG_ENABLE_DISPLAY
