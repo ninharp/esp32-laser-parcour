@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <unistd.h>
 
 /**
  * GET /api/sounds/mappings - Get current sound event mappings
@@ -102,7 +103,7 @@ esp_err_t sound_files_handler(httpd_req_t *req)
                     cJSON_AddStringToObject(file_obj, "name", entry->d_name);
                     
                     // Get file size
-                    char filepath[256];
+                    char filepath[300];
                     snprintf(filepath, sizeof(filepath), "%s/%s", CONFIG_SOUND_FILES_PATH, entry->d_name);
                     struct stat st;
                     if (stat(filepath, &st) == 0) {
@@ -134,6 +135,9 @@ esp_err_t sound_files_handler(httpd_req_t *req)
 esp_err_t sound_upload_handler(httpd_req_t *req)
 {
     int uploaded = 0;
+    char filepath[128];
+    FILE *fp = NULL;
+    char *buf = NULL;
     
     // Parse multipart form data (simplified - full implementation would parse boundaries)
     // For now, we'll accept raw file data with filename in header

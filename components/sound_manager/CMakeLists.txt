@@ -9,6 +9,9 @@ idf_component_register(
         fatfs
         sd_card_manager
         buzzer
+        audio_pipeline
+        audio_stream
+        esp-adf-libs
     PRIV_REQUIRES
         esp_http_server
 )

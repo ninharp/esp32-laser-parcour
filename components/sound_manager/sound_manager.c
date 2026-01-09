@@ -25,7 +25,7 @@
 #include "mp3_decoder.h"
 #include "wav_decoder.h"
 #include "fatfs_stream.h"
-#include "board.h"
+#include "filter_resample.h"
 
 static const char *TAG = "SOUND_MGR";
 
@@ -49,6 +49,7 @@ static audio_element_handle_t i2s_stream_writer = NULL;
 static audio_element_handle_t mp3_decoder = NULL;
 static audio_element_handle_t wav_decoder = NULL;
 static audio_element_handle_t fatfs_reader = NULL;
+static audio_element_handle_t resample_filter = NULL;
 static audio_event_iface_handle_t evt = NULL;
 
 // Configuration
@@ -109,22 +110,41 @@ static esp_err_t init_i2s_stream(void)
 {
     i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
     i2s_cfg.type = AUDIO_STREAM_WRITER;
-    i2s_cfg.i2s_config.mode = I2S_MODE_MASTER | I2S_MODE_TX;
-    i2s_cfg.i2s_config.sample_rate = 48000;
-    i2s_cfg.i2s_config.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
-    i2s_cfg.i2s_config.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;
-    i2s_cfg.i2s_config.communication_format = I2S_COMM_FORMAT_STAND_I2S;
-    i2s_cfg.i2s_config.dma_buf_count = 8;
-    i2s_cfg.i2s_config.dma_buf_len = 64;
-    i2s_cfg.i2s_config.use_apll = false;
-    i2s_cfg.i2s_config.tx_desc_auto_clear = true;
-    i2s_cfg.i2s_config.intr_alloc_flags = ESP_INTR_FLAG_LEVEL2;
     
-    i2s_cfg.i2s_port = I2S_NUM_0;
-    i2s_cfg.i2s_config.pin.bck_io_num = current_config.bck_io_num;
-    i2s_cfg.i2s_config.pin.ws_io_num = current_config.ws_io_num;
-    i2s_cfg.i2s_config.pin.data_out_num = current_config.data_out_num;
-    i2s_cfg.i2s_config.pin.data_in_num = -1;
+    // Configure channel for I2S NUM 0
+    i2s_cfg.chan_cfg.id = I2S_NUM_0;
+    i2s_cfg.chan_cfg.role = I2S_ROLE_MASTER;
+    i2s_cfg.chan_cfg.dma_desc_num = 8;
+    i2s_cfg.chan_cfg.dma_frame_num = 300;
+    i2s_cfg.chan_cfg.auto_clear = true;
+    
+    // Configure standard mode with clock settings
+    // Let ESP-ADF auto-configure sample rate based on audio file
+    // Common rates: 24000, 32000, 44100, 48000 Hz
+    i2s_cfg.std_cfg.clk_cfg.sample_rate_hz = 44100;  // Default, will be adjusted by decoder
+    i2s_cfg.std_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
+    
+    // Configure slot (data format) settings - Philips I2S format
+    i2s_cfg.std_cfg.slot_cfg.data_bit_width = I2S_DATA_BIT_WIDTH_16BIT;
+    i2s_cfg.std_cfg.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_AUTO;
+    i2s_cfg.std_cfg.slot_cfg.slot_mode = I2S_SLOT_MODE_STEREO;
+    i2s_cfg.std_cfg.slot_cfg.slot_mask = I2S_STD_SLOT_BOTH;
+    i2s_cfg.std_cfg.slot_cfg.ws_width = I2S_DATA_BIT_WIDTH_16BIT;
+    i2s_cfg.std_cfg.slot_cfg.ws_pol = false;
+    i2s_cfg.std_cfg.slot_cfg.bit_shift = true;
+    i2s_cfg.std_cfg.slot_cfg.left_align = true;
+    i2s_cfg.std_cfg.slot_cfg.big_endian = false;
+    i2s_cfg.std_cfg.slot_cfg.bit_order_lsb = false;
+    
+    // Configure GPIO pins
+    i2s_cfg.std_cfg.gpio_cfg.bclk = current_config.bck_io_num;
+    i2s_cfg.std_cfg.gpio_cfg.ws = current_config.ws_io_num;
+    i2s_cfg.std_cfg.gpio_cfg.dout = current_config.data_out_num;
+    i2s_cfg.std_cfg.gpio_cfg.din = I2S_GPIO_UNUSED;
+    i2s_cfg.std_cfg.gpio_cfg.mclk = I2S_GPIO_UNUSED;
+    i2s_cfg.std_cfg.gpio_cfg.invert_flags.mclk_inv = false;
+    i2s_cfg.std_cfg.gpio_cfg.invert_flags.bclk_inv = false;
+    i2s_cfg.std_cfg.gpio_cfg.invert_flags.ws_inv = false;
     
     i2s_stream_writer = i2s_stream_init(&i2s_cfg);
     if (i2s_stream_writer == NULL) {
@@ -160,6 +180,16 @@ static esp_err_t init_pipeline(void)
     // Create WAV decoder
     wav_decoder_cfg_t wav_cfg = DEFAULT_WAV_DECODER_CONFIG();
     wav_decoder = wav_decoder_init(&wav_cfg);
+    
+    // Create resample filter for sample rate conversion
+    // This converts any input sample rate to 44100 Hz for I2S output
+    rsp_filter_cfg_t rsp_cfg = DEFAULT_RESAMPLE_FILTER_CONFIG();
+    rsp_cfg.src_rate = 44100;  // Will be auto-adjusted by decoder
+    rsp_cfg.src_ch = 2;        // Stereo input
+    rsp_cfg.dest_rate = 44100; // Output to I2S
+    rsp_cfg.dest_ch = 2;       // Stereo output
+    rsp_cfg.mode = RESAMPLE_DECODE_MODE;
+    resample_filter = rsp_filter_init(&rsp_cfg);
     
     // Create I2S stream
     if (init_i2s_stream() != ESP_OK) {
@@ -239,6 +269,7 @@ esp_err_t sound_manager_deinit(void)
         audio_pipeline_unregister(pipeline, fatfs_reader);
         audio_pipeline_unregister(pipeline, mp3_decoder);
         audio_pipeline_unregister(pipeline, wav_decoder);
+        audio_pipeline_unregister(pipeline, resample_filter);
         audio_pipeline_unregister(pipeline, i2s_stream_writer);
         audio_pipeline_deinit(pipeline);
     }
@@ -247,6 +278,7 @@ esp_err_t sound_manager_deinit(void)
     if (fatfs_reader) audio_element_deinit(fatfs_reader);
     if (mp3_decoder) audio_element_deinit(mp3_decoder);
     if (wav_decoder) audio_element_deinit(wav_decoder);
+    if (resample_filter) audio_element_deinit(resample_filter);
     if (i2s_stream_writer) audio_element_deinit(i2s_stream_writer);
     if (evt) audio_event_iface_destroy(evt);
     
@@ -306,15 +338,17 @@ esp_err_t sound_manager_play_file(const char *filename, sound_mode_t mode)
     audio_pipeline_reset_elements(pipeline);
     audio_pipeline_unregister(pipeline, mp3_decoder);
     audio_pipeline_unregister(pipeline, wav_decoder);
+    audio_pipeline_unregister(pipeline, resample_filter);
     
-    // Register elements
+    // Register elements: file -> decoder -> resample -> i2s
     audio_pipeline_register(pipeline, fatfs_reader, "file");
     audio_pipeline_register(pipeline, decoder, "dec");
+    audio_pipeline_register(pipeline, resample_filter, "filter");
     audio_pipeline_register(pipeline, i2s_stream_writer, "i2s");
     
-    // Link elements
-    const char *link_tag[3] = {"file", "dec", "i2s"};
-    audio_pipeline_link(pipeline, &link_tag[0], 3);
+    // Link elements in chain
+    const char *link_tag[4] = {"file", "dec", "filter", "i2s"};
+    audio_pipeline_link(pipeline, &link_tag[0], 4);
     
     // Set URI
     audio_element_set_uri(fatfs_reader, filepath);
