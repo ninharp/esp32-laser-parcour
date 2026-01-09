@@ -157,7 +157,18 @@
         function updateStatus() {
             fetch('/api/status').then(r => r.json()).then(d => {
                 currentState = d.state;
-                document.getElementById('status').innerHTML = `State: ${d.state}<br>Time: ${d.time_remaining}s<br>Beam Breaks: ${d.beam_breaks || 0}`;
+                let statusText = `State: ${d.state}<br>`;
+                
+                // Show countdown or time depending on state
+                if (d.state === 'COUNTDOWN' && d.countdown !== undefined) {
+                    statusText += `Starting in: ${d.countdown}s<br>`;
+                } else {
+                    statusText += `Time: ${d.time_remaining}s<br>`;
+                }
+                
+                statusText += `Beam Breaks: ${d.beam_breaks || 0}`;
+                document.getElementById('status').innerHTML = statusText;
+                
                 let btn = document.getElementById('game-toggle-btn');
                 if (d.state === 'IDLE' || d.state === 'COMPLETE' || d.state === 'ERROR') {
                     btn.innerHTML = '▶️ Start Game';

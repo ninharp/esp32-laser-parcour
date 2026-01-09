@@ -187,6 +187,16 @@ static esp_err_t status_handler(httpd_req_t *req)
         snprintf(cached_status, sizeof(cached_status),
                  "{\"state\":\"%s\",\"time_remaining\":%lu,\"beam_breaks\":%d}",
                  state_str, elapsed_sec, player_data.beam_breaks);
+    } else if (state == GAME_STATE_COUNTDOWN && game_get_player_data(&player_data) == ESP_OK) {
+        // Show countdown remaining time
+        uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+        uint32_t countdown_remaining = 0;
+        if (now < player_data.start_time) {
+            countdown_remaining = (player_data.start_time - now) / 1000;
+        }
+        snprintf(cached_status, sizeof(cached_status),
+                 "{\"state\":\"%s\",\"countdown\":%lu,\"beam_breaks\":0}",
+                 state_str, countdown_remaining);
     } else if (state == GAME_STATE_COMPLETE && game_get_player_data(&player_data) == ESP_OK) {
         // Show final time when complete
         uint32_t elapsed_sec = player_data.elapsed_time / 1000;

@@ -33,6 +33,9 @@ static TaskHandle_t display_update_task_handle = NULL;
 // Heartbeat timer for sending periodic heartbeats to laser units
 static esp_timer_handle_t heartbeat_timer = NULL;
 
+// Last countdown value for buzzer triggering
+static int last_countdown_value = -1;
+
 /**
  * Heartbeat timer callback (Main Unit)
  * Sends periodic heartbeat to all laser units to keep safety timers alive
@@ -88,6 +91,7 @@ static void display_update_task(void *pvParameters)
                 display_text("Start via Web", 6);
                 display_update();
                 complete_screen_shown = false;
+                last_countdown_value = -1;  // Reset countdown tracking
                 break;
                 
             case GAME_STATE_COUNTDOWN:
@@ -99,6 +103,13 @@ static void display_update_task(void *pvParameters)
                         countdown_remaining = (player_data.start_time - now) / 1000;
                     }
                     display_countdown(countdown_remaining);
+                    
+                    // Play buzzer beep on each countdown tick
+                    if (countdown_remaining > 0 && last_countdown_value != countdown_remaining) {
+                        last_countdown_value = countdown_remaining;
+                        buzzer_play_pattern(BUZZER_PATTERN_COUNTDOWN);
+                        ESP_LOGI(TAG, "Countdown beep: %lu", (unsigned long)countdown_remaining);
+                    }
                 }
                 break;
                 
