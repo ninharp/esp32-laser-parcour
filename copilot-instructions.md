@@ -11,12 +11,17 @@ Ein modulares, ESP32-C3 basiertes Laser-Hindernisparcours-Spielsystem mit drahtl
 - I2C (OLED Display)
 - ADC (Sensor Detection)
 - LEDC PWM (Laser Control)
+- SD Card (Web Interface & High Scores)
 
 ---
 
 ## 📝 Dokumentations-Regeln
 
-**WICHTIG:** Bei jeder signifikanten Code-Änderung MUSS die README.md aktualisiert werden!
+**⚠️ KRITISCH - IMMER BEFOLGEN:**
+
+**🔴 NACH JEDEM SCHRITT MUSS DIE `copilot-instructions.md` AKTUALISIERT WERDEN! 🔴**
+
+Dies ist KEINE optionale Aufgabe - es ist eine PFLICHT!
 
 **Signifikante Änderungen umfassen:**
 - ✅ Neue Features oder Komponenten
@@ -29,6 +34,8 @@ Ein modulares, ESP32-C3 basiertes Laser-Hindernisparcours-Spielsystem mit drahtl
 - ✅ Neue Modulrollen oder Gerätetypen
 - ✅ Änderungen am Kommunikationsprotokoll (ESP-NOW Messages)
 - ✅ Web-Interface-Änderungen
+- ✅ Code-Refactoring oder Modularisierung
+- ✅ Bugfixes die Verhalten ändern
 
 **README Update Checkliste:**
 1. Feature-Liste aktualisieren (✨ Features Sektion)
@@ -50,18 +57,29 @@ esp32-laser-parcour/
 ├── sdkconfig.defaults                # Standard SDK-Konfiguration
 ├── README.md                         # Projekt-Dokumentation
 ├── copilot-instructions.md           # Diese Datei
+├── TODO                              # Task-Liste
 │
 ├── main/                             # Haupt-Anwendung
 │   ├── main.c                        # Hauptprogramm mit app_main()
+│   ├── main.c.backup                 # Original vor Refactoring (BACKUP!)
+│   ├── module_control.c/.h           # Control Unit Module (Main Unit)
+│   ├── module_laser.c/.h             # Laser Unit Module
+│   ├── module_finish.c/.h            # Finish Button Module
+│   ├── logging_config.c/.h           # Zentrales Logging
 │   ├── Kconfig.projbuild             # Menuconfig-Optionen
-│   └── CMakeLists.txt                # Build-Konfiguration für main
+│   └── CMakeLists.txt                # Build-Config (conditional compilation)
 │
 ├── components/                       # Wiederverwendbare Komponenten
 │   ├── display_manager/              # OLED Display Steuerung
 │   ├── game_logic/                   # Spiellogik & Scoring
 │   ├── espnow_manager/               # ESP-NOW Kommunikation
 │   ├── laser_control/                # Laser PWM Steuerung
-│   └── sensor_manager/               # ADC Sensor für Beam Detection
+│   ├── sensor_manager/               # ADC Sensor für Beam Detection
+│   ├── button_handler/               # Button-Eingabe mit Debouncing
+│   ├── buzzer/                       # PWM Audio-Feedback
+│   ├── wifi_ap_manager/              # WiFi Access Point
+│   ├── web_server/                   # HTTP Server & REST API
+│   └── sd_card_manager/              # SD Card für Web-Files & Scores
 │
 ├── docs/                             # Zusätzliche Dokumentation
 │   └── README.md
@@ -71,6 +89,33 @@ esp32-laser-parcour/
     ├── bootloader/                   # Bootloader
     └── partition_table/              # Partitionstabelle
 ```
+
+---
+
+## 🔄 Aktuelle Architektur-Änderungen (Januar 2026)
+
+### Modularisierung in separate Module
+
+**Problem:** main.c war 1578 Zeilen lang mit #ifdef Blöcken für verschiedene Device Types
+
+**Lösung:** Aufteilung in separate Module mit conditional compilation:
+
+```
+main.c (130 lines)           → Core init + module delegation
+module_control.c (643 lines) → Control Unit (Main Unit)
+module_laser.c (507 lines)   → Laser Unit
+module_finish.c (352 lines)  → Finish Button Unit
+```
+
+**Build-System:**
+- `CMakeLists.txt` kompiliert nur das passende Modul basierend auf `CONFIG_MODULE_ROLE_XXX`
+- Header haben `#ifdef CONFIG_MODULE_ROLE_XXX` Guards
+- Jedes Modul hat `module_xxx_init()` und `module_xxx_run()` Funktionen
+
+**WICHTIG - Original-Funktionalität:**
+- `main.c.backup` enthält die ORIGINAL working implementation (1578 lines)
+- Bei Funktionalitätsproblemen IMMER gegen `main.c.backup` vergleichen!
+- Alle Fixes müssen EXAKTE Funktionalität aus backup wiederherstellen
 
 ---
 
@@ -468,6 +513,47 @@ typedef esp_err_t (*game_control_callback_t)(const char *command, const char *da
 **Konfiguration:**
 - Server läuft auf WiFi AP IP (192.168.4.1)
 - Keine zusätzlichen Kconfig-Optionen nötig
+
+**Verwendet von:** Main Unit (CONTROL Module)
+
+---
+
+#### `components/sd_card_manager/`
+**Zweck:** SD Card Management für Web-Interface-Dateien und High Scores  
+**Hauptfunktionen:**
+```c
+esp_err_t sd_card_manager_init(const sd_card_config_t *config)
+esp_err_t sd_card_get_info(sd_card_info_t *info)
+bool sd_card_is_mounted(void)
+const char* sd_card_get_mount_point(void)
+```
+
+**SD Card Info:**
+```c
+typedef struct {
+    uint64_t total_bytes;
+    uint64_t free_bytes;
+    char card_type[16];
+    bool web_dir_available;  // /web Verzeichnis vorhanden?
+} sd_card_info_t;
+```
+
+**Features:**
+- SPI-Modus für SD/SDHC/SDXC Karten
+- FAT32 Dateisystem
+- Mount Point: /sdcard
+- Web-Interface von SD: /sdcard/web/
+- High Scores: /sdcard/scores/
+- Optionale Konfiguration (NULL = Menuconfig Pins)
+
+**Dependencies:** `fatfs`, `sdmmc`, `driver` (SPI)
+
+**Konfigurationsoptionen (Kconfig):**
+- CONFIG_ENABLE_SD_CARD (optional feature flag)
+- CONFIG_SD_MISO_PIN
+- CONFIG_SD_MOSI_PIN
+- CONFIG_SD_CLK_PIN
+- CONFIG_SD_CS_PIN
 
 **Verwendet von:** Main Unit (CONTROL Module)
 
@@ -1739,23 +1825,167 @@ Ctrl+]
 ## 🚀 Zukünftige Erweiterungen (TODO)
 
 ### Main Unit
-- [ ] Button-Handler Component
-- [ ] Buzzer/Audio Component
-- [ ] WiFi AP Implementation
-- [ ] Web Server Component
+- [x] Button-Handler Component (✅ Implementiert)
+- [x] Buzzer/Audio Component (✅ Implementiert)
+- [x] WiFi AP Implementation (✅ Implementiert)
+- [x] Web Server Component (✅ Implementiert)
+- [x] SD Card Support (✅ Implementiert)
 - [ ] OTA Update System
 
 ### Laser Unit
-- [ ] LED Component (Status-LEDs in eigene Komponente)
-- [ ] Erweiterte Kalibrierung
+- [x] LED Component (Status-LEDs implementiert)
+- [x] Erweiterte Kalibrierung (✅ Sensor-Kalibrierung)
+- [x] Multi-Channel Pairing (✅ Implementiert)
+- [x] Heartbeat System (✅ Implementiert)
 
 ### Beide
+- [x] Multi-Module Support (✅ CONTROL, LASER, FINISH)
 - [ ] Persistente Statistiken (NVS)
 - [ ] Multi-Player Support
 - [ ] Game Modes erweitern
-- [ ] Web-Interface für Live-Monitoring
+- [x] Web-Interface für Live-Monitoring (✅ Implementiert)
 
 ---
+
+## 📅 Aktuelle Änderungen (Januar 2026)
+
+### 2026-01-09: Code Modularisierung & Funktionalitäts-Wiederherstellung
+
+**Problem:** main.c war 1578 Zeilen lang und schwer zu warten
+
+**Lösung:** Aufteilung in separate Module mit conditional compilation:
+
+**Neue Struktur:**
+```
+main/
+├── main.c (130 lines)              # Core init + module delegation
+├── main.c.backup (1578 lines)      # ORIGINAL WORKING CODE - BACKUP!
+├── module_control.c (643 lines)    # Control Unit implementation
+├── module_control.h                # Control Unit header
+├── module_laser.c (507 lines)      # Laser Unit implementation
+├── module_laser.h                  # Laser Unit header
+├── module_finish.c (352 lines)     # Finish Button implementation
+├── module_finish.h                 # Finish Button header
+├── logging_config.c                # Centralized logging
+└── logging_config.h                # Logging declarations
+```
+
+**Build-System Änderungen:**
+- `main/CMakeLists.txt` kompiliert nur das passende Modul:
+  ```cmake
+  if(CONFIG_MODULE_ROLE_CONTROL)
+      list(APPEND MODULE_SRCS "module_control.c")
+  elseif(CONFIG_MODULE_ROLE_LASER)
+      list(APPEND MODULE_SRCS "module_laser.c")
+  elseif(CONFIG_MODULE_ROLE_FINISH)
+      list(APPEND MODULE_SRCS "module_finish.c")
+  endif()
+  ```
+
+**Header Guards:**
+- Header haben `#ifdef CONFIG_MODULE_ROLE_XXX` Guards INNERHALB
+- NICHT wrappen des gesamten Headers (verhindert Compile-Fehler)
+
+**Funktionalitäts-Wiederherstellung:**
+
+1. **Control Module (module_control.c):**
+   - ✅ `button_event_callback`: Laser Toggle nutzt `game_control_laser()` statt Broadcast
+   - ✅ `game_control_callback`: Fehlerbehandlung wie im Original
+   - ✅ `espnow_recv_callback_main`: MSG_FINISH_PRESSED ruft `game_finish()` auf
+   - ✅ `display_update_task`: Update-Interval 100ms, zeigt "Units: X" im IDLE-Screen
+   - ✅ `GAME_STATE_COUNTDOWN`: Case hinzugefügt mit `display_countdown()`
+   - ✅ Display init mit `CONFIG_I2C_FREQUENCY`
+   - ✅ Button config mit `CONFIG_DEBOUNCE_TIME`
+   - ✅ **Heartbeat-System**: Main Unit sendet alle 5 Sekunden MSG_HEARTBEAT Broadcasts
+   - ✅ `heartbeat_timer_callback`: Hält Laser Unit Safety-Timer am Leben (bereits implementiert)
+
+2. **Laser Module (module_laser.c):**
+   - ✅ `espnow_recv_callback_laser`: War bereits korrekt
+   - ✅ Initial Pairing Request: Sendet `NULL` statt `&role` (wie im Original)
+   - ✅ `MSG_HEARTBEAT` Handler: Aktualisiert `last_main_unit_heartbeat` bei Main Unit Heartbeats
+   - ✅ Safety Timer: 10 Sekunden (funktioniert mit Main Unit Heartbeats alle 5s)
+
+3. **Finish Module (module_finish.c):**
+   - ✅ `button_handler_task`: War bereits korrekt
+   - ✅ `button_isr_handler`: War bereits korrekt
+   - ✅ Finish Message: Sendet **Unicast** an `main_unit_mac` (nicht Broadcast)
+
+**Wichtige Learnings:**
+- ⚠️ IMMER gegen `main.c.backup` vergleichen bei Funktionsproblemen!
+- ⚠️ EXAKTE Funktionalität kopieren, nicht "verbessern"!
+- ⚠️ API-Strukturen NICHT annehmen - im Code nachschauen!
+- ⚠️ Display braucht explizite Updates im IDLE-State
+- ⚠️ Update-Interval ist kritisch für responsive UI (100ms nicht 1000ms)
+
+**Compile-Fehler behoben:**
+- Duplizierte Button-Initialisierungs-Sektion entfernt
+- `button_configs` → `buttons` (korrekte Variable)
+- Redundante `#else #endif` Blöcke entfernt
+
+**Web-Interface Sicherheit (2026-01-09):**
+- Problem: Manuelle Laser-Steuerung war während eines laufenden Spiels möglich
+- Lösung: `units_control_handler` prüft jetzt den Game-State
+- Blockiert: `laser_on` und `laser_off` während RUNNING, COUNTDOWN, PENALTY, PAUSED
+- Erlaubt: `reset` ist immer möglich (auch während Spiel)
+- Error-Response: `{"error":"Cannot control laser during active game"}`
+- File: `components/web_server/web_server.c` Lines 495-509
+
+**Web-Interface Status-Anzeige (2026-01-09):**
+- Problem: Laser-Status zeigte immer OFF während Spiel läuft (obwohl Laser AN sind)
+- Lösung 1: `/api/units` gibt jetzt `game_state` und `game_active` zurück
+- Lösung 2: Frontend zeigt Laser als ON während Spiel läuft (für role=1 Units)
+- Lösung 3: ON/OFF Buttons werden disabled und zeigen "🔒 LOCKED" während Spiel
+- Lösung 4: `control()` Funktion ruft `updateUnits()` nach Game Start/Stop auf (sofortiges Update)
+- CSS: `.btn:disabled` Style für deaktivierte Buttons (grau, not-allowed cursor)
+- File: `components/web_server/web_server.c` Lines 452-459
+- File: `components/web_server/index.html` Lines 237-269 (updateUnits function)
+- File: `components/web_server/index.html` Lines 68-75 (disabled button style)
+- File: `components/web_server/index.html` Lines 193-197 (control function with updateUnits)
+
+---
+
+## 🔧 Best Practices
+
+### Code-Änderungen
+
+**🔴 NACH JEDEM SCHRITT:**
+1. ✅ `copilot-instructions.md` aktualisieren
+2. ✅ Bei Funktionalitätsänderungen: Gegen Backup vergleichen
+3. ✅ Build testen (`idf.py build`)
+4. ✅ Auf allen betroffenen Devices testen
+
+### Debugging
+
+**Bei Funktionsproblemen:**
+1. 🔍 Logs überprüfen (`idf.py monitor`)
+2. 🔍 Gegen `main.c.backup` vergleichen
+3. 🔍 API-Dokumentation in Component-Headers checken
+4. 🔍 EXAKTE Original-Implementierung wiederherstellen
+
+### Refactoring
+
+**Beim Umstrukturieren von Code:**
+1. ⚠️ BACKUP erstellen BEVOR Änderungen gemacht werden
+2. ⚠️ Funktionalität 1:1 kopieren, nicht "verbessern"
+3. ⚠️ Alle Event-Handler und Callbacks exakt übernehmen
+4. ⚠️ Variablennamen, Typen, Parameter identisch lassen
+5. ⚠️ Testen auf ALLEN Device-Typen (CONTROL, LASER, FINISH)
+
+---
+
+## 📚 Referenzen
+
+- [ESP-IDF Documentation](https://docs.espressif.com/projects/esp-idf/en/v5.4.2/esp32c3/)
+- [ESP-NOW Protocol](https://docs.espressif.com/projects/esp-idf/en/v5.4.2/esp32c3/api-reference/network/esp_now.html)
+- [SSD1306 OLED](https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf)
+- [LEDC PWM](https://docs.espressif.com/projects/esp-idf/en/v5.4.2/esp32c3/api-reference/peripherals/ledc.html)
+
+---
+
+**Version:** 3.0.0  
+**Letztes Update:** 9. Januar 2026  
+**Autor:** @ninharp
+
 
 ## 📝 Coding-Konventionen
 

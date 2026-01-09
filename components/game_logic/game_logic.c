@@ -25,9 +25,9 @@ static player_data_t current_player = {0};
 static game_stats_t statistics = {0};
 static game_config_t configuration = {
     .mode = GAME_MODE_SINGLE_SPEEDRUN,
-    .max_time = 0,              // No time limit (0 = unlimited)
-    .penalty_time = 15,         // 15 seconds penalty per beam break
-    .countdown_time = 5,        // 5 second countdown
+    .max_time = CONFIG_GAME_DURATION,       // From Kconfig (0 = unlimited)
+    .penalty_time = CONFIG_PENALTY_TIME,    // From Kconfig
+    .countdown_time = CONFIG_COUNTDOWN_DURATION,  // From Kconfig
     .max_players = 8
 };
 
@@ -35,6 +35,10 @@ static game_config_t configuration = {
 static uint32_t penalty_start_time = 0;
 static uint32_t total_penalty_time = 0;  // Accumulated penalty time in ms
 #define PENALTY_DISPLAY_TIME_MS 3000  // Show PENALTY state for 3 seconds
+
+// Countdown timer
+static esp_timer_handle_t countdown_timer = NULL;
+static int countdown_remaining = 0;
 
 // Mutex for thread-safe access
 static SemaphoreHandle_t game_mutex = NULL;
@@ -61,6 +65,57 @@ esp_err_t game_logic_init(void)
     
     ESP_LOGI(TAG, "Game logic initialized successfully");
     return ESP_OK;
+}
+
+/**
+ * Countdown timer callback
+ * Fires every second during countdown, plays buzzer and transitions to RUNNING when done
+ */
+static void countdown_timer_callback(void *arg)
+{
+    if (xSemaphoreTake(game_mutex, 0) != pdTRUE) {
+        return;  // Skip this tick if we can't get mutex
+    }
+    
+    countdown_remaining--;
+    ESP_LOGI(TAG, "Countdown: %d", countdown_remaining);
+    
+    if (countdown_remaining <= 0) {
+        // Countdown finished - transition to RUNNING
+        ESP_LOGI(TAG, "Countdown finished - starting game");
+        
+        // Stop countdown timer
+        if (countdown_timer != NULL) {
+            esp_timer_stop(countdown_timer);
+        }
+        
+        // Set actual game start time (now)
+        current_player.start_time = (uint32_t)(esp_timer_get_time() / 1000);
+        
+        // Change state to running
+        current_state = GAME_STATE_RUNNING;
+        
+        xSemaphoreGive(game_mutex);
+        
+        // Send MSG_GAME_START to all registered laser units
+        ESP_LOGI(TAG, "Sending MSG_GAME_START to all laser units");
+        
+        laser_unit_info_t units[MAX_LASER_UNITS];
+        size_t unit_count = 0;
+        game_get_laser_units(units, MAX_LASER_UNITS, &unit_count);
+        
+        for (size_t i = 0; i < unit_count; i++) {
+            esp_err_t ret = espnow_send_message(units[i].mac_addr, MSG_GAME_START, NULL, 0);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to send game start to unit %d: %s", 
+                         units[i].module_id, esp_err_to_name(ret));
+            } else {
+                ESP_LOGI(TAG, "Game start sent to laser unit %d", units[i].module_id);
+            }
+        }
+    } else {
+        xSemaphoreGive(game_mutex);
+    }
 }
 
 /**
@@ -95,7 +150,6 @@ esp_err_t game_start(game_mode_t mode, const char *player_name)
     } else {
         strcpy(current_player.name, "Player 1");
     }
-    current_player.start_time = (uint32_t)(esp_timer_get_time() / 1000);
     current_player.is_active = true;
     current_player.completion = COMPLETION_NONE;
     
@@ -106,29 +160,39 @@ esp_err_t game_start(game_mode_t mode, const char *player_name)
     // Set game mode
     configuration.mode = mode;
     
-    // Change state to running (skip countdown for web interface)
-    current_state = GAME_STATE_RUNNING;
+    // Get countdown duration from config
+    countdown_remaining = CONFIG_COUNTDOWN_DURATION;
     
-    ESP_LOGI(TAG, "Game starting - Mode: %d, Player: %s", mode, current_player.name);
+    // Set start_time to countdown end time (for display purposes)
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    current_player.start_time = now + (countdown_remaining * 1000);
+    
+    // Change state to countdown
+    current_state = GAME_STATE_COUNTDOWN;
+    
+    ESP_LOGI(TAG, "Game countdown starting - Mode: %d, Player: %s, Countdown: %d seconds", 
+             mode, current_player.name, countdown_remaining);
     
     xSemaphoreGive(game_mutex);
     
-    // Send MSG_GAME_START to all registered laser units (unicast)
-    ESP_LOGI(TAG, "Sending MSG_GAME_START to all laser units");
-    
-    // Get current laser units list
-    laser_unit_info_t units[MAX_LASER_UNITS];
-    size_t unit_count = 0;
-    game_get_laser_units(units, MAX_LASER_UNITS, &unit_count);
-    
-    for (size_t i = 0; i < unit_count; i++) {
-        esp_err_t ret = espnow_send_message(units[i].mac_addr, MSG_GAME_START, NULL, 0);
+    // Create and start countdown timer if it doesn't exist
+    if (countdown_timer == NULL) {
+        const esp_timer_create_args_t timer_args = {
+            .callback = &countdown_timer_callback,
+            .name = "countdown_timer"
+        };
+        esp_err_t ret = esp_timer_create(&timer_args, &countdown_timer);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to send game start to unit %d: %s", 
-                     units[i].module_id, esp_err_to_name(ret));
-        } else {
-            ESP_LOGI(TAG, "Game start sent to laser unit %d", units[i].module_id);
+            ESP_LOGE(TAG, "Failed to create countdown timer: %s", esp_err_to_name(ret));
+            return ret;
         }
+    }
+    
+    // Start countdown timer (fires every second)
+    esp_err_t ret = esp_timer_start_periodic(countdown_timer, 1000000);  // 1 second
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start countdown timer: %s", esp_err_to_name(ret));
+        return ret;
     }
     
     return ESP_OK;

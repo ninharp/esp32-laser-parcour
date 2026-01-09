@@ -187,6 +187,16 @@ static esp_err_t status_handler(httpd_req_t *req)
         snprintf(cached_status, sizeof(cached_status),
                  "{\"state\":\"%s\",\"time_remaining\":%lu,\"beam_breaks\":%d}",
                  state_str, elapsed_sec, player_data.beam_breaks);
+    } else if (state == GAME_STATE_COUNTDOWN && game_get_player_data(&player_data) == ESP_OK) {
+        // Show countdown remaining time
+        uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+        uint32_t countdown_remaining = 0;
+        if (now < player_data.start_time) {
+            countdown_remaining = (player_data.start_time - now) / 1000;
+        }
+        snprintf(cached_status, sizeof(cached_status),
+                 "{\"state\":\"%s\",\"countdown\":%lu,\"beam_breaks\":0}",
+                 state_str, countdown_remaining);
     } else if (state == GAME_STATE_COMPLETE && game_get_player_data(&player_data) == ESP_OK) {
         // Show final time when complete
         uint32_t elapsed_sec = player_data.elapsed_time / 1000;
@@ -451,6 +461,14 @@ static esp_err_t units_list_handler(httpd_req_t *req)
     cJSON_AddItemToObject(root, "units", units_array);
     cJSON_AddNumberToObject(root, "count", unit_count);
     
+    // Add current game state so frontend can disable controls during active game
+    extern game_state_t game_get_state(void);
+    game_state_t state = game_get_state();
+    cJSON_AddNumberToObject(root, "game_state", state);
+    bool game_active = (state == GAME_STATE_RUNNING || state == GAME_STATE_COUNTDOWN || 
+                       state == GAME_STATE_PENALTY || state == GAME_STATE_PAUSED);
+    cJSON_AddBoolToObject(root, "game_active", game_active);
+    
     char *json_string = cJSON_Print(root);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json_string, HTTPD_RESP_USE_STRLEN);
@@ -491,6 +509,21 @@ static esp_err_t units_control_handler(httpd_req_t *req)
     
     uint8_t module_id = (uint8_t)id_item->valueint;
     const char *action = action_item->valuestring;
+    
+    // Check if game is running - block manual laser control during game
+    extern game_state_t game_get_state(void);
+    game_state_t state = game_get_state();
+    
+    // Block laser_on/laser_off during active game (RUNNING, COUNTDOWN, PENALTY, PAUSED)
+    if ((strcmp(action, "laser_on") == 0 || strcmp(action, "laser_off") == 0) &&
+        (state == GAME_STATE_RUNNING || state == GAME_STATE_COUNTDOWN || 
+         state == GAME_STATE_PENALTY || state == GAME_STATE_PAUSED)) {
+        cJSON_Delete(json);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, "{\"error\":\"Cannot control laser during active game\"}", HTTPD_RESP_USE_STRLEN);
+        ESP_LOGW(TAG, "Laser control blocked - game is active (state: %d)", state);
+        return ESP_OK;
+    }
     
     extern esp_err_t game_control_laser(uint8_t module_id, bool laser_on, uint8_t intensity);
     extern esp_err_t game_reset_laser_unit(uint8_t module_id);

@@ -65,6 +65,15 @@
         .btn-scan:hover {
             background: #0b7dda;
         }
+        .btn:disabled {
+            background: #cccccc;
+            color: #666666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        .btn:disabled:hover {
+            background: #cccccc;
+        }
         .status {
             padding: 15px;
             margin: 10px 0;
@@ -148,7 +157,18 @@
         function updateStatus() {
             fetch('/api/status').then(r => r.json()).then(d => {
                 currentState = d.state;
-                document.getElementById('status').innerHTML = `State: ${d.state}<br>Time: ${d.time_remaining}s<br>Beam Breaks: ${d.beam_breaks || 0}`;
+                let statusText = `State: ${d.state}<br>`;
+                
+                // Show countdown or time depending on state
+                if (d.state === 'COUNTDOWN' && d.countdown !== undefined) {
+                    statusText += `Starting in: ${d.countdown}s<br>`;
+                } else {
+                    statusText += `Time: ${d.time_remaining}s<br>`;
+                }
+                
+                statusText += `Beam Breaks: ${d.beam_breaks || 0}`;
+                document.getElementById('status').innerHTML = statusText;
+                
                 let btn = document.getElementById('game-toggle-btn');
                 if (d.state === 'IDLE' || d.state === 'COMPLETE' || d.state === 'ERROR') {
                     btn.innerHTML = '▶️ Start Game';
@@ -181,6 +201,7 @@
         function control(cmd) {
             fetch('/api/game/' + cmd, {method: 'POST'}).then(r => r.json()).then(d => {
                 updateStatus();
+                updateUnits();  // Update units list immediately to show LOCKED state
             }).catch(e => console.error('Control error:', e));
         }
         
@@ -239,9 +260,12 @@
                 if (d.count === 0) {
                     html = '<li>No laser units detected</li>';
                 } else {
+                    let gameActive = d.game_active || false;
                     d.units.forEach(u => {
                         let status = u.online ? '🟢 Online' : '🔴 Offline';
-                        let laser = u.laser_on ? '🔴 ON' : '⚫ OFF';
+                        // During active game, show laser as ON for laser units (role 1)
+                        let laserActuallyOn = gameActive && u.role === 1 ? true : u.laser_on;
+                        let laser = laserActuallyOn ? '🔴 ON' : '⚫ OFF';
                         let isFinish = u.role === 2;  // role 2 = finish button
                         let unitType = isFinish ? '🏁 Finish Button' : 'Laser Unit';
                         let unitStyle = isFinish ? 'style="border-left: 4px solid #4CAF50;"' : '';
@@ -254,7 +278,12 @@
                         
                         // Show controls only for laser units (not finish button)
                         if (!isFinish) {
-                            html += `<div><button class='btn ${u.laser_on ? "btn-stop" : "btn-start"}' onclick='controlUnit(${u.id},"${u.laser_on ? "laser_off" : "laser_on"}")'>${u.laser_on ? "OFF" : "ON"}</button></div>`;
+                            // Disable laser controls during active game
+                            let disabled = gameActive ? 'disabled' : '';
+                            let btnClass = gameActive ? 'btn' : (u.laser_on ? 'btn btn-stop' : 'btn btn-start');
+                            let btnText = gameActive ? '🔒 LOCKED' : (u.laser_on ? 'OFF' : 'ON');
+                            let onclick = gameActive ? '' : `onclick='controlUnit(${u.id},"${u.laser_on ? "laser_off" : "laser_on"}")'`;
+                            html += `<div><button class='${btnClass}' ${disabled} ${onclick}>${btnText}</button></div>`;
                         }
                         html += `</li>`;
                     });
