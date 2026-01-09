@@ -347,4 +347,61 @@ menu "Laser Parcour Configuration"
 
     endmenu
 
+    menu "SD Card Configuration"
+        depends on MODULE_ROLE_CONTROL
+
+        config ENABLE_SD_CARD
+            bool "Enable SD Card Support"
+            default n
+            help
+                Enable SD Card support via SPI interface.
+                
+                When enabled and SD card is present with /web directory:
+                - Web interface files will be served from /sdcard/web/
+                - Allows custom web interface without reflashing firmware
+                
+                Fallback to internal web interface if:
+                - SD card initialization fails
+                - /web directory not found
+                
+                SD card remains mounted for other uses (e.g., logging, sound files).
+
+        config SD_CARD_MOSI_PIN
+            int "SD Card MOSI Pin (SPI)"
+            range 0 21
+            default 7
+            depends on ENABLE_SD_CARD
+            help
+                GPIO pin for SPI MOSI (Master Out Slave In) signal.
+                Connect to SD card's DI (Data In) pin.
+
+        config SD_CARD_MISO_PIN
+            int "SD Card MISO Pin (SPI)"
+            range 0 21
+            default 2
+            depends on ENABLE_SD_CARD
+            help
+                GPIO pin for SPI MISO (Master In Slave Out) signal.
+                Connect to SD card's DO (Data Out) pin.
+
+        config SD_CARD_CLK_PIN
+            int "SD Card CLK Pin (SPI)"
+            range 0 21
+            default 6
+            depends on ENABLE_SD_CARD
+            help
+                GPIO pin for SPI CLK (Clock) signal.
+                Connect to SD card's CLK pin.
+
+        config SD_CARD_CS_PIN
+            int "SD Card CS Pin (SPI)"
+            range 0 21
+            default 10
+            depends on ENABLE_SD_CARD
+            help
+                GPIO pin for SPI CS (Chip Select) signal.
+                Connect to SD card's CS pin.
+
+    endmenu
+
 endmenu

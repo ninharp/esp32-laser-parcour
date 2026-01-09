@@ -34,6 +34,10 @@
 #include "buzzer.h"
 #include "web_server.h"
 
+#ifdef CONFIG_ENABLE_SD_CARD
+#include "sd_card_manager.h"
+#endif
+
 static const char *TAG = "LASER_PARCOUR";
 
 // Module role from Kconfig
@@ -561,6 +565,31 @@ static void init_main_unit(void)
     buzzer_play_pattern(BUZZER_PATTERN_SUCCESS); // Startup sound
 #else
     ESP_LOGI(TAG, "  Buzzer disabled in menuconfig");
+#endif
+
+#ifdef CONFIG_ENABLE_SD_CARD
+    // Initialize SD Card (optional, errors are non-fatal)
+    ESP_LOGI(TAG, "  Initializing SD Card...");
+    esp_err_t sd_ret = sd_card_manager_init(NULL);  // NULL = use menuconfig pins
+    if (sd_ret == ESP_OK) {
+        sd_card_info_t sd_info;
+        if (sd_card_get_info(&sd_info) == ESP_OK) {
+            ESP_LOGI(TAG, "  SD Card mounted: %llu MB total, %llu MB free",
+                     sd_info.total_bytes / (1024*1024),
+                     sd_info.free_bytes / (1024*1024));
+            ESP_LOGI(TAG, "  Card Type: %s", sd_info.card_type);
+            
+            if (sd_info.web_dir_available) {
+                ESP_LOGI(TAG, "  Web interface available on SD card");
+            } else {
+                ESP_LOGI(TAG, "  No /web directory on SD card, using internal interface");
+            }
+        }
+    } else {
+        ESP_LOGW(TAG, "  SD Card initialization failed (continuing without SD card)");
+    }
+#else
+    ESP_LOGI(TAG, "  SD Card support disabled in menuconfig");
 #endif
     
     // Initialize WiFi (required for ESP-NOW and web server)

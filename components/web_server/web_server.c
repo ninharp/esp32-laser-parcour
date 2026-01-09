@@ -1,10 +1,11 @@
 /**
- * Web Server Component - Extended with WiFi Management
+ * Web Server Component - Extended with WiFi Management and SD Card Support
  * 
  * Provides HTTP server for game control and WiFi configuration
+ * Supports serving web files from SD card (/sdcard/web/) with fallback to internal files
  * 
  * @author ninharp
- * @date 2025-01-07
+ * @date 2025-01-09
  */
 
 #include "web_server.h"
@@ -13,27 +14,147 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include <string.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "cJSON.h"
+
+#ifdef CONFIG_ENABLE_SD_CARD
+#include "sd_card_manager.h"
+#endif
 
 static const char *TAG = "WEB_SERVER";
 
 static httpd_handle_t server = NULL;
 static game_control_callback_t game_callback = NULL;
 static char cached_status[512] = "";
+static bool use_sd_card_web = false;  // Flag für SD-Karten Web-Interface
 
-// Embedded HTML file
+// Embedded HTML file (Fallback)
 extern const uint8_t index_html_start[] asm("_binary_index_html_start");
 extern const uint8_t index_html_end[] asm("_binary_index_html_end");
 
 /**
- * Root handler - serve HTML page
+ * Helper: Get MIME type from file extension
+ */
+static const char *get_mime_type(const char *filename)
+{
+    if (strstr(filename, ".html")) return "text/html";
+    if (strstr(filename, ".css")) return "text/css";
+    if (strstr(filename, ".js")) return "application/javascript";
+    if (strstr(filename, ".json")) return "application/json";
+    if (strstr(filename, ".png")) return "image/png";
+    if (strstr(filename, ".jpg") || strstr(filename, ".jpeg")) return "image/jpeg";
+    if (strstr(filename, ".gif")) return "image/gif";
+    if (strstr(filename, ".svg")) return "image/svg+xml";
+    if (strstr(filename, ".ico")) return "image/x-icon";
+    if (strstr(filename, ".txt")) return "text/plain";
+    return "application/octet-stream";
+}
+
+/**
+ * Root handler - serve HTML page (from SD card or internal)
  */
 static esp_err_t root_handler(httpd_req_t *req)
 {
+#ifdef CONFIG_ENABLE_SD_CARD
+    // Versuche von SD-Karte zu laden
+    if (use_sd_card_web) {
+        char filepath[128];
+        snprintf(filepath, sizeof(filepath), "%s/web/index.html", sd_card_get_mount_point());
+        
+        // Versuche Datei zu öffnen
+        FILE *file = fopen(filepath, "r");
+        if (file) {
+            ESP_LOGI(TAG, "Serving index.html from SD card: %s", filepath);
+            httpd_resp_set_type(req, "text/html");
+            
+            char buffer[512];
+            size_t read_bytes;
+            while ((read_bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+                if (httpd_resp_send_chunk(req, buffer, read_bytes) != ESP_OK) {
+                    fclose(file);
+                    httpd_resp_send_chunk(req, NULL, 0);  // Abort chunked send
+                    return ESP_FAIL;
+                }
+            }
+            
+            fclose(file);
+            httpd_resp_send_chunk(req, NULL, 0);  // Finish chunked send
+            return ESP_OK;
+        }
+        
+        ESP_LOGW(TAG, "Failed to open %s, falling back to internal HTML", filepath);
+    }
+#endif
+    
+    // Fallback: Internes HTML
     httpd_resp_set_type(req, "text/html");
     const size_t index_html_len = index_html_end - index_html_start;
     return httpd_resp_send(req, (const char *)index_html_start, index_html_len);
 }
+
+/**
+ * Generic file handler for SD card web files
+ * Serves any file from /sdcard/web/ directory
+ */
+#ifdef CONFIG_ENABLE_SD_CARD
+static esp_err_t sd_file_handler(httpd_req_t *req)
+{
+    if (!use_sd_card_web) {
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+    
+    // URI path z.B. "/style.css" → "/sdcard/web/style.css"
+    char filepath[1024];  // Größerer Buffer für lange Pfade
+    snprintf(filepath, sizeof(filepath), "%s/web%s", sd_card_get_mount_point(), req->uri);
+    
+    ESP_LOGI(TAG, "Requesting SD card file: %s", filepath);
+    
+    // Sicherheit: Path traversal verhindern
+    if (strstr(filepath, "..")) {
+        ESP_LOGW(TAG, "Path traversal attempt blocked: %s", filepath);
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+    
+    // Prüfen ob Datei existiert
+    struct stat st;
+    if (stat(filepath, &st) != 0) {
+        ESP_LOGW(TAG, "File not found: %s", filepath);
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+    
+    // Datei öffnen
+    FILE *file = fopen(filepath, "r");
+    if (!file) {
+        ESP_LOGE(TAG, "Failed to open file: %s", filepath);
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    
+    // MIME-Type setzen
+    httpd_resp_set_type(req, get_mime_type(filepath));
+    
+    // Datei chunked senden
+    char buffer[512];
+    size_t read_bytes;
+    while ((read_bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        if (httpd_resp_send_chunk(req, buffer, read_bytes) != ESP_OK) {
+            fclose(file);
+            httpd_resp_send_chunk(req, NULL, 0);
+            return ESP_FAIL;
+        }
+    }
+    
+    fclose(file);
+    httpd_resp_send_chunk(req, NULL, 0);
+    
+    return ESP_OK;
+}
+#endif
 
 /**
  * Status handler - return game status as JSON
@@ -409,6 +530,20 @@ esp_err_t web_server_init(httpd_handle_t *server_out, game_control_callback_t ca
     
     game_callback = callback;
     
+#ifdef CONFIG_ENABLE_SD_CARD
+    // Prüfe ob SD-Karte mit /web Verzeichnis verfügbar ist
+    if (sd_card_get_status() == SD_STATUS_MOUNTED && sd_card_has_web_interface()) {
+        use_sd_card_web = true;
+        ESP_LOGI(TAG, "Using web interface from SD card: %s/web/", sd_card_get_mount_point());
+    } else {
+        use_sd_card_web = false;
+        ESP_LOGI(TAG, "SD card web interface not available, using internal HTML");
+    }
+#else
+    use_sd_card_web = false;
+    ESP_LOGI(TAG, "SD card support disabled, using internal HTML");
+#endif
+    
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 16;
     config.stack_size = 8192;
@@ -429,6 +564,7 @@ esp_err_t web_server_init(httpd_handle_t *server_out, game_control_callback_t ca
     };
     httpd_register_uri_handler(server, &root_uri);
     
+
     httpd_uri_t status_uri = {
         .uri = "/api/status",
         .method = HTTP_GET,
@@ -508,6 +644,20 @@ esp_err_t web_server_init(httpd_handle_t *server_out, game_control_callback_t ca
         .handler = units_control_handler
     };
     httpd_register_uri_handler(server, &units_control_uri);
+    
+#ifdef CONFIG_ENABLE_SD_CARD
+    // Wildcard handler für SD-Karten-Dateien registrieren (NACH allen API-Handlers!)
+    // Dadurch werden zuerst /api/* Routen geprüft, dann SD-Card-Dateien
+    if (use_sd_card_web) {
+        httpd_uri_t sd_file_uri = {
+            .uri = "/*",
+            .method = HTTP_GET,
+            .handler = sd_file_handler
+        };
+        httpd_register_uri_handler(server, &sd_file_uri);
+        ESP_LOGI(TAG, "Registered wildcard handler for SD card files");
+    }
+#endif
     
     if (server_out) {
         *server_out = server;
