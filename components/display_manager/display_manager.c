@@ -349,7 +349,7 @@ esp_err_t display_text(const char *message, uint8_t line)
     return ESP_OK;
 }
 
-esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks)
+esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks, completion_status_t completion)
 {
     return ESP_OK;
 }
