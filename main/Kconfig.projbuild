@@ -188,7 +188,7 @@ menu "Laser Parcour Configuration"
 
         config DISPLAY_ROTATION_180
             bool "Rotate Display 180 Degrees"
-            default n
+            default y
             depends on MODULE_ROLE_CONTROL && ENABLE_DISPLAY
             help
                 Rotate the OLED display by 180 degrees.
@@ -205,7 +205,7 @@ menu "Laser Parcour Configuration"
         config BUTTON1_PIN
             int "Button 1 Pin (Start/Stop)"
             range -1 21
-            default 1
+            default 10
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
                 GPIO pin for Button 1 (Start/Stop/Resume game).
@@ -227,7 +227,7 @@ menu "Laser Parcour Configuration"
         config BUTTON3_PIN
             int "Button 3 Pin (Stop/Reset)"
             range -1 21
-            default 7
+            default 2
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
                 GPIO pin for Button 3 (Stop running game).
@@ -237,7 +237,7 @@ menu "Laser Parcour Configuration"
         config BUTTON4_PIN
             int "Button 4 Pin (Reserved)"
             range -1 21
-            default 6
+            default 1
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
                 GPIO pin for Button 4 (Reserved for future use).
@@ -246,7 +246,7 @@ menu "Laser Parcour Configuration"
 
         config ENABLE_BUZZER
             bool "Enable Buzzer"
-            default y
+            default n
             depends on MODULE_ROLE_CONTROL
             help
                 Enable buzzer/speaker for audio feedback.
@@ -313,7 +313,7 @@ menu "Laser Parcour Configuration"
         config FINISH_STATUS_LED_PIN
             int "Finish Button Status LED Pin"
             range 0 21
-            default 21
+            default 6
             depends on MODULE_ROLE_FINISH
             help
                 GPIO pin for status LED indicating connection/pairing status.
@@ -322,7 +322,7 @@ menu "Laser Parcour Configuration"
         config FINISH_BUTTON_LED_PIN
             int "Finish Button Illumination LED Pin"
             range 0 21
-            default 20
+            default 7
             depends on MODULE_ROLE_FINISH
             help
                 GPIO pin for button illumination LED.
@@ -352,7 +352,7 @@ menu "Laser Parcour Configuration"
 
         config ENABLE_SD_CARD
             bool "Enable SD Card Support"
-            default n
+            default y
             help
                 Enable SD Card support via SPI interface.
                 
@@ -378,7 +378,7 @@ menu "Laser Parcour Configuration"
         config SD_CARD_MISO_PIN
             int "SD Card MISO Pin (SPI)"
             range 0 21
-            default 2
+            default 5
             depends on ENABLE_SD_CARD
             help
                 GPIO pin for SPI MISO (Master In Slave Out) signal.
@@ -396,7 +396,7 @@ menu "Laser Parcour Configuration"
         config SD_CARD_CS_PIN
             int "SD Card CS Pin (SPI)"
             range 0 21
-            default 10
+            default 8
             depends on ENABLE_SD_CARD
             help
                 GPIO pin for SPI CS (Chip Select) signal.
