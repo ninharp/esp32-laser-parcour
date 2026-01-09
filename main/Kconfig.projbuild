@@ -193,43 +193,32 @@ menu "Laser Parcour Configuration"
                 Set to -1 to disable this button.
 
         config BUTTON2_PIN
-            int "Button 2 Pin (Pause/Resume)"
+            int "Button 2 Pin (Stop/Reset)"
             range -1 21
             default 3
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
-                GPIO pin for Button 2 (Pause/Resume during game).
-                - Pause game when RUNNING
-                - Resume game when PAUSED
+                GPIO pin for Button 2 (Stop running game).
+                - Immediately stops and resets active game
                 Set to -1 to disable this button.
 
         config BUTTON3_PIN
-            int "Button 3 Pin (Stop/Reset)"
+            int "Button 3 Pin (Debug Finish)"
             range -1 21
             default 2
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
-                GPIO pin for Button 3 (Stop running game).
-                - Immediately stops and resets active game
-                Set to -1 to disable this button.
-
-        config BUTTON4_PIN
-            int "Button 4 Pin (Debug Finish)"
-            range -1 21
-            default 1
-            depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
-            help
-                GPIO pin for Button 4 (Debug Finish Button).
+                GPIO pin for Button 3 (Debug Finish Button).
                 Can be used to trigger game finish without walking to the finish line.
-                Enable/disable this function with CONFIG_ENABLE_BUTTON4_DEBUG_FINISH.
+                Enable/disable this function with CONFIG_ENABLE_BUTTON3_DEBUG_FINISH.
                 Set to -1 to disable this button.
 
-        config ENABLE_BUTTON4_DEBUG_FINISH
-            bool "Enable Button 4 as Debug Finish Button"
+        config ENABLE_BUTTON3_DEBUG_FINISH
+            bool "Enable Button 3 as Debug Finish Button"
             default y
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
-                When enabled, Button 4 acts as a debug finish button.
+                When enabled, Button 3 acts as a debug finish button.
                 Pressing it during an active game will trigger game_finish(),
                 simulating a successful parcour completion.
                 

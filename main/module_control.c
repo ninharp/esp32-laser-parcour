@@ -262,33 +262,7 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                 }
                 break;
                 
-            case 1:  // Button 2 - Pause/Resume
-                ESP_LOGI(TAG, "Pause/Resume button pressed");
-                {
-                    game_state_t state = game_get_state();
-                    if (state == GAME_STATE_RUNNING || state == GAME_STATE_PENALTY) {
-                        ESP_LOGI(TAG, "Pausing game...");
-                        esp_err_t ret = game_pause();
-                        if (ret == ESP_OK) {
-                            ESP_LOGI(TAG, "Game paused");
-                        } else {
-                            audio_play_event(AUDIO_EVENT_ERROR, false);
-                            ESP_LOGE(TAG, "Failed to pause game: %s", esp_err_to_name(ret));
-                        }
-                    } else if (state == GAME_STATE_PAUSED) {
-                        ESP_LOGI(TAG, "Resuming game...");
-                        esp_err_t ret = game_resume();
-                        if (ret == ESP_OK) {
-                            ESP_LOGI(TAG, "Game resumed");
-                        } else {
-                            audio_play_event(AUDIO_EVENT_ERROR, false);
-                            ESP_LOGE(TAG, "Failed to resume game: %s", esp_err_to_name(ret));
-                        }
-                    }
-                }
-                break;
-                
-            case 2:  // Button 3 - Reset/Stop
+            case 1:  // Button 2 - Reset/Stop
                 ESP_LOGI(TAG, "Reset button pressed");
                 {
                     game_state_t state = game_get_state();
@@ -309,8 +283,8 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                 }
                 break;
                 
-            case 3:  // Button 4 - Debug Finish Button
-#ifdef CONFIG_ENABLE_BUTTON4_DEBUG_FINISH
+            case 2:  // Button 3 - Debug Finish Button
+#ifdef CONFIG_ENABLE_BUTTON3_DEBUG_FINISH
                 {
                     game_state_t state = game_get_state();
                     if (state == GAME_STATE_RUNNING || state == GAME_STATE_PENALTY) {
@@ -328,7 +302,7 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                     }
                 }
 #else
-                ESP_LOGI(TAG, "Button 4 pressed (debug finish disabled)");
+                ESP_LOGI(TAG, "Button 3 pressed (debug finish disabled)");
 #endif
                 break;
         }
@@ -519,16 +493,15 @@ void module_control_init(void)
 
 #ifdef CONFIG_ENABLE_BUTTONS
     // Initialize buttons
-    button_config_t buttons[4] = {
+    button_config_t buttons[3] = {
         {.pin = CONFIG_BUTTON1_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true},
         {.pin = CONFIG_BUTTON2_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true},
-        {.pin = CONFIG_BUTTON3_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true},
-        {.pin = CONFIG_BUTTON4_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true}
+        {.pin = CONFIG_BUTTON3_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true}
     };
     
     // Count enabled buttons
     uint8_t num_buttons = 0;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
         if (buttons[i].pin != -1) num_buttons++;
     }
     
@@ -677,8 +650,8 @@ void module_control_init(void)
     ESP_LOGI(TAG, "Display:        Disabled (menuconfig)");
 #endif
 #ifdef CONFIG_ENABLE_BUTTONS
-    ESP_LOGI(TAG, "Buttons:        B1=GPIO%d, B2=GPIO%d, B3=GPIO%d, B4=GPIO%d",
-             CONFIG_BUTTON1_PIN, CONFIG_BUTTON2_PIN, CONFIG_BUTTON3_PIN, CONFIG_BUTTON4_PIN);
+    ESP_LOGI(TAG, "Buttons:        B1=GPIO%d, B2=GPIO%d, B3=GPIO%d",
+             CONFIG_BUTTON1_PIN, CONFIG_BUTTON2_PIN, CONFIG_BUTTON3_PIN);
 #else
     ESP_LOGI(TAG, "Buttons:        Disabled (menuconfig)");
 #endif

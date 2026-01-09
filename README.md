@@ -36,11 +36,10 @@ Built with **ESP-IDF 5.4.2** for maximum performance and reliability.
 ### User Interface  
 - 📱 **Web interface** - Full game control and monitoring via WiFi
 - 🖥️ **OLED display (optional)** - Shows game status, time, and results
-- 🔘 **Physical buttons (optional)** - 4-button control for standalone operation:
+- 🔘 **Physical buttons (optional)** - 3-button control for standalone operation:
   - **Button 1**: Start/Stop/Resume (long press: toggle all lasers)
-  - **Button 2**: Pause/Resume during game
-  - **Button 3**: Stop/Reset active game, returns to idle screen
-  - **Button 4**: Reserved for future use
+  - **Button 2**: Stop/Reset active game, returns to idle screen
+  - **Button 3**: Debug Finish (configurable via menuconfig)
 - 🎵 **Audio feedback (optional)** - Buzzer with multiple sound patterns
 - 💾 **SD Card support (optional)** - Custom web interface files from SD card
 
@@ -180,9 +179,8 @@ idf.py build flash monitor
 | 18 | OLED SCL | I2C Clock *(optional)* |
 | 5 | Buzzer | PWM Audio *(optional)* |
 | 1 | Button 1 | Start/Stop/Resume *(optional)* |
-| 3 | Button 2 | Pause/Resume *(optional)* |
-| 7 | Button 3 | Stop/Reset *(optional)* |
-| 6 | Button 4 | Reserved *(optional)* |
+| 3 | Button 2 | Stop/Reset *(optional)* |
+| 2 | Button 3 | Debug Finish *(optional, configurable)* |
 | 10 | SD CS | SD Card Chip Select *(optional)* |
 | 6 | SD CLK | SD Card Clock *(optional)* |
 | 2 | SD MISO | SD Card Data In *(optional)* |

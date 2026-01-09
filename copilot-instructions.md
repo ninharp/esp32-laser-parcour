@@ -422,9 +422,10 @@ typedef void (*button_event_callback_t)(uint8_t button_id, button_event_t event)
 **Dependencies:** `driver` (GPIO), `freertos`, `esp_timer`
 
 **Konfigurationsoptionen (Kconfig):**
-- CONFIG_BUTTON1_PIN bis CONFIG_BUTTON4_PIN
+- CONFIG_BUTTON1_PIN bis CONFIG_BUTTON3_PIN
 - CONFIG_DEBOUNCE_TIME (default: 50ms)
 - CONFIG_ENABLE_BUTTONS (optional feature flag)
+- CONFIG_ENABLE_BUTTON3_DEBUG_FINISH (enable Button 3 as debug finish)
 
 **Verwendet von:** Main Unit (CONTROL Module)
 
