@@ -412,7 +412,7 @@ menu "Laser Parcour Configuration"
         config I2S_WS_PIN
             int "I2S WS (Word Select) Pin"
             range 0 21
-            default 5
+            default 0
             depends on ENABLE_SOUND_MANAGER
             help
                 GPIO pin for I2S word select (WS/LRCLK).
@@ -421,7 +421,7 @@ menu "Laser Parcour Configuration"
         config I2S_DATA_OUT_PIN
             int "I2S Data Out Pin"
             range 0 21
-            default 6
+            default 1
             depends on ENABLE_SOUND_MANAGER
             help
                 GPIO pin for I2S data output (DOUT).
