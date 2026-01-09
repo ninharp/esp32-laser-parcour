@@ -32,6 +32,10 @@ void init_logging(void)
     esp_log_level_set("WEB_SERVER", ESP_LOG_DEBUG);       // HTTP web server
     esp_log_level_set("WIFI_AP_MGR", ESP_LOG_DEBUG);      // WiFi AP manager
     esp_log_level_set("SD_CARD_MANAGER", ESP_LOG_DEBUG);  // SD card manager
+
+    esp_log_level_set("MODULE_CTRL", ESP_LOG_DEBUG);    // Control module
+    esp_log_level_set("MODULE_LASER", ESP_LOG_DEBUG);    // Laser module
+    esp_log_level_set("MODULE_FINISH", ESP_LOG_DEBUG);   // Finish button module
     
     // ========================================
     // ESP-IDF SYSTEM COMPONENTS
