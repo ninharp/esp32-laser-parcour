@@ -1930,6 +1930,16 @@ main/
 - Error-Response: `{"error":"Cannot control laser during active game"}`
 - File: `components/web_server/web_server.c` Lines 495-509
 
+**Web-Interface Status-Anzeige (2026-01-09):**
+- Problem: Laser-Status zeigte immer OFF während Spiel läuft (obwohl Laser AN sind)
+- Lösung 1: `/api/units` gibt jetzt `game_state` und `game_active` zurück
+- Lösung 2: Frontend zeigt Laser als ON während Spiel läuft (für role=1 Units)
+- Lösung 3: ON/OFF Buttons werden disabled und zeigen "🔒 LOCKED" während Spiel
+- CSS: `.btn:disabled` Style für deaktivierte Buttons (grau, not-allowed cursor)
+- File: `components/web_server/web_server.c` Lines 452-459
+- File: `components/web_server/index.html` Lines 237-269 (updateUnits function)
+- File: `components/web_server/index.html` Lines 68-75 (disabled button style)
+
 ---
 
 ## 🔧 Best Practices

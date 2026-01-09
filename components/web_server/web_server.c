@@ -451,6 +451,14 @@ static esp_err_t units_list_handler(httpd_req_t *req)
     cJSON_AddItemToObject(root, "units", units_array);
     cJSON_AddNumberToObject(root, "count", unit_count);
     
+    // Add current game state so frontend can disable controls during active game
+    extern game_state_t game_get_state(void);
+    game_state_t state = game_get_state();
+    cJSON_AddNumberToObject(root, "game_state", state);
+    bool game_active = (state == GAME_STATE_RUNNING || state == GAME_STATE_COUNTDOWN || 
+                       state == GAME_STATE_PENALTY || state == GAME_STATE_PAUSED);
+    cJSON_AddBoolToObject(root, "game_active", game_active);
+    
     char *json_string = cJSON_Print(root);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json_string, HTTPD_RESP_USE_STRLEN);
