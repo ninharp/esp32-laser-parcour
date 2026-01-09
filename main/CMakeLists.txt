@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "main.c"
+    SRCS "main.c" "logging_config.c"
     INCLUDE_DIRS "."
     REQUIRES nvs_flash esp_wifi esp_netif esp_event esp_http_server driver
              display_manager game_logic espnow_manager laser_control sensor_manager

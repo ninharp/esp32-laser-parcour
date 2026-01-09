@@ -23,6 +23,9 @@
 #include "esp_chip_info.h"
 #include "esp_timer.h"
 
+// Logging configuration
+#include "logging_config.h"
+
 // Component includes
 #include "display_manager.h"
 #include "game_logic.h"
@@ -1502,19 +1505,9 @@ static void init_finish_button_unit(void)
  */
 void app_main(void)
 {
-    esp_log_level_set("*", ESP_LOG_NONE);  // Default log level
-    esp_log_level_set("gpio", ESP_LOG_DEBUG);
-    esp_log_level_set("WIFI_MGR", ESP_LOG_DEBUG);
-    esp_log_level_set("LASER_PARCOUR", ESP_LOG_DEBUG);
-    esp_log_level_set("DISPLAY_MGR", ESP_LOG_INFO);
-    esp_log_level_set("SSD1306", ESP_LOG_DEBUG);
-    esp_log_level_set("LASER_PARCOUR", ESP_LOG_DEBUG);
-    esp_log_level_set("BUTTON", ESP_LOG_DEBUG);
-    esp_log_level_set("sd_card_manager", ESP_LOG_DEBUG);
-    esp_log_level_set("WIFI_MGRWEB_SERVER", ESP_LOG_DEBUG);
-    esp_log_level_set("ESPNOW_MGR", ESP_LOG_DEBUG);
-    esp_log_level_set("GAME_LOGIC", ESP_LOG_DEBUG);
-
+    // Initialize logging levels for all components
+    init_logging();
+    
     // Print system information
     print_system_info();
     
