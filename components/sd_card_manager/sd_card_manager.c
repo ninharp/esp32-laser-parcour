@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <string.h>
 
-static const char *TAG = "sd_card_manager";
+static const char *TAG = "SD_CARD_MANAGER";
 
 // Globale Variablen
 static sd_status_t current_status = SD_STATUS_NOT_INITIALIZED;
