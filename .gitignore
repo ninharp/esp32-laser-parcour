@@ -34,6 +34,7 @@ ENV/
 # Dependencies
 dependencies/
 managed_components/
+dependencies.lock
 
 # Logs
 *.log
