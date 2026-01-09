@@ -110,27 +110,6 @@ menu "Laser Parcour Configuration"
             help
                 Countdown duration before game starts.
 
-        config BASE_SCORE
-            int "Base Score"
-            range 0 10000
-            default 1000
-            help
-                Starting score for each game.
-
-        config TIME_BONUS_MULTIPLIER
-            int "Time Bonus Multiplier"
-            range 0 100
-            default 10
-            help
-                Points awarded per second of time remaining.
-
-        config PENALTY_POINTS
-            int "Penalty Points (negative)"
-            range -1000 0
-            default -50
-            help
-                Points deducted per beam break (use negative number).
-
     endmenu
 
     menu "Hardware Configuration"
