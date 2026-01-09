@@ -208,34 +208,40 @@ menu "Laser Parcour Configuration"
             default 1
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
-                GPIO pin for Button 1 (Start/Stop game).
+                GPIO pin for Button 1 (Start/Stop/Resume game).
+                - Short press: Start game (IDLE) / Stop game (RUNNING) / Resume game (PAUSED)
+                - Long press: Toggle all laser units ON/OFF
                 Set to -1 to disable this button.
 
         config BUTTON2_PIN
-            int "Button 2 Pin (Mode Select)"
+            int "Button 2 Pin (Pause/Resume)"
             range -1 21
             default 3
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
-                GPIO pin for Button 2 (Mode selection).
+                GPIO pin for Button 2 (Pause/Resume during game).
+                - Pause game when RUNNING
+                - Resume game when PAUSED
                 Set to -1 to disable this button.
 
         config BUTTON3_PIN
-            int "Button 3 Pin (Reset)"
+            int "Button 3 Pin (Stop/Reset)"
             range -1 21
             default 7
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
-                GPIO pin for Button 3 (Reset score).
+                GPIO pin for Button 3 (Stop running game).
+                - Immediately stops and resets active game
                 Set to -1 to disable this button.
 
         config BUTTON4_PIN
-            int "Button 4 Pin (Confirm)"
+            int "Button 4 Pin (Reserved)"
             range -1 21
             default 6
             depends on MODULE_ROLE_CONTROL && ENABLE_BUTTONS
             help
-                GPIO pin for Button 4 (Confirm selection).
+                GPIO pin for Button 4 (Reserved for future use).
+                Currently not assigned to any function.
                 Set to -1 to disable this button.
 
         config ENABLE_BUZZER

@@ -278,20 +278,121 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
         switch (button_id) {
             case 0:  // Button 1 - Start/Stop
                 ESP_LOGI(TAG, "Start/Stop button pressed");
-                // TODO: Toggle game start/stop
+                {
+                    game_state_t state = game_get_state();
+                    if (state == GAME_STATE_IDLE || state == GAME_STATE_COMPLETE) {
+                        // Start game
+                        ESP_LOGI(TAG, "Starting game...");
+                        esp_err_t ret = game_start(GAME_MODE_SINGLE_SPEEDRUN, "Player");
+                        if (ret == ESP_OK) {
+                            buzzer_play_pattern(BUZZER_PATTERN_GAME_START);
+                            ESP_LOGI(TAG, "Game started successfully");
+                        } else {
+                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            ESP_LOGE(TAG, "Failed to start game: %s", esp_err_to_name(ret));
+                        }
+                    } else if (state == GAME_STATE_RUNNING || state == GAME_STATE_PENALTY) {
+                        // Stop game
+                        ESP_LOGI(TAG, "Stopping game...");
+                        esp_err_t ret = game_stop();
+                        if (ret == ESP_OK) {
+                            buzzer_play_pattern(BUZZER_PATTERN_GAME_END);
+                            ESP_LOGI(TAG, "Game stopped");
+                        } else {
+                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            ESP_LOGE(TAG, "Failed to stop game: %s", esp_err_to_name(ret));
+                        }
+                    } else if (state == GAME_STATE_PAUSED) {
+                        // Resume game
+                        ESP_LOGI(TAG, "Resuming game...");
+                        esp_err_t ret = game_resume();
+                        if (ret == ESP_OK) {
+                            ESP_LOGI(TAG, "Game resumed");
+                        } else {
+                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            ESP_LOGE(TAG, "Failed to resume game: %s", esp_err_to_name(ret));
+                        }
+                    }
+                }
                 break;
-            case 1:  // Button 2 - Mode Select
-                ESP_LOGI(TAG, "Mode select button pressed");
-                // TODO: Cycle through game modes
+            case 1:  // Button 2 - Pause/Resume
+                ESP_LOGI(TAG, "Pause/Resume button pressed");
+                {
+                    game_state_t state = game_get_state();
+                    if (state == GAME_STATE_RUNNING || state == GAME_STATE_PENALTY) {
+                        ESP_LOGI(TAG, "Pausing game...");
+                        esp_err_t ret = game_pause();
+                        if (ret == ESP_OK) {
+                            ESP_LOGI(TAG, "Game paused");
+                        } else {
+                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            ESP_LOGE(TAG, "Failed to pause game: %s", esp_err_to_name(ret));
+                        }
+                    } else if (state == GAME_STATE_PAUSED) {
+                        ESP_LOGI(TAG, "Resuming game...");
+                        esp_err_t ret = game_resume();
+                        if (ret == ESP_OK) {
+                            ESP_LOGI(TAG, "Game resumed");
+                        } else {
+                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            ESP_LOGE(TAG, "Failed to resume game: %s", esp_err_to_name(ret));
+                        }
+                    }
+                }
                 break;
-            case 2:  // Button 3 - Reset
+            case 2:  // Button 3 - Reset/Stop
                 ESP_LOGI(TAG, "Reset button pressed");
-                // TODO: Reset game
+                {
+                    game_state_t state = game_get_state();
+                    if (state == GAME_STATE_RUNNING || state == GAME_STATE_PENALTY || state == GAME_STATE_PAUSED) {
+                        ESP_LOGI(TAG, "Stopping game...");
+                        esp_err_t ret = game_stop();
+                        if (ret == ESP_OK) {
+                            buzzer_play_pattern(BUZZER_PATTERN_GAME_END);
+                            ESP_LOGI(TAG, "Game stopped and reset");
+                        } else {
+                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            ESP_LOGE(TAG, "Failed to stop game: %s", esp_err_to_name(ret));
+                        }
+                    }
+                }
                 break;
-            case 3:  // Button 4 - Confirm
-                ESP_LOGI(TAG, "Confirm button pressed");
-                // TODO: Confirm selection
+            case 3:  // Button 4 - Reserved for future use
+                ESP_LOGI(TAG, "Button 4 pressed (no action assigned)");
                 break;
+        }
+    } else if (event == BUTTON_EVENT_LONG_PRESS) {
+        // Long press on Button 1: Turn all lasers ON/OFF
+        if (button_id == 0) {
+            ESP_LOGI(TAG, "Long press on Start/Stop button - toggling all lasers");
+            buzzer_play_pattern(BUZZER_PATTERN_BEEP);
+            
+            // Get all laser units
+            laser_unit_info_t units[MAX_LASER_UNITS];
+            size_t unit_count = 0;
+            game_get_laser_units(units, MAX_LASER_UNITS, &unit_count);
+            
+            // Toggle laser state (if any laser is on, turn all off; otherwise turn all on)
+            bool any_laser_on = false;
+            for (size_t i = 0; i < unit_count; i++) {
+                if (units[i].laser_on && units[i].role == 1) {  // Only check laser units
+                    any_laser_on = true;
+                    break;
+                }
+            }
+            
+            // Send command to all laser units
+            for (size_t i = 0; i < unit_count; i++) {
+                if (units[i].role == 1) {  // Only control laser units
+                    if (any_laser_on) {
+                        game_control_laser(units[i].module_id, false, 0);  // Turn off
+                    } else {
+                        game_control_laser(units[i].module_id, true, 100);  // Turn on
+                    }
+                }
+            }
+            
+            ESP_LOGI(TAG, "All lasers turned %s", any_laser_on ? "OFF" : "ON");
         }
     }
 }
