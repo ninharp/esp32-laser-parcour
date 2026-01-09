@@ -243,21 +243,15 @@ esp_err_t display_game_results(uint32_t final_time, uint16_t beam_breaks, comple
         ssd1306_draw_string(15, 0, "GAME CANCELED!");
     }
     
-    // Line 2: Divider
-    ssd1306_draw_hline(2, 0xFF);
-    
-    // Line 3: Total Time label
-    ssd1306_draw_string(25, 3, "Total Time:");
-    
-    // Line 4-5: Time (large)
+    // Line 1: Time
     char time_str[20];
     snprintf(time_str, sizeof(time_str), "%02lu:%02lu.%02lu", minutes, seconds, millis);
-    ssd1306_draw_string(15, 5, time_str);
+    ssd1306_draw_string(25, 1, time_str);
     
-    // Line 7: Breaks
+    // Line 2: Breaks
     char breaks_str[20];
     snprintf(breaks_str, sizeof(breaks_str), "Breaks: %d", beam_breaks);
-    ssd1306_draw_string(30, 7, breaks_str);
+    ssd1306_draw_string(30, 2, breaks_str);
 #elif defined(CONFIG_OLED_SH1106)
     // SH1106 implementation (TODO)
 #endif
