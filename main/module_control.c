@@ -308,8 +308,27 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                 }
                 break;
                 
-            case 3:  // Button 4 - Reserved for future use
-                ESP_LOGI(TAG, "Button 4 pressed (no action assigned)");
+            case 3:  // Button 4 - Debug Finish Button
+#ifdef CONFIG_ENABLE_BUTTON4_DEBUG_FINISH
+                {
+                    game_state_t state = game_get_state();
+                    if (state == GAME_STATE_RUNNING || state == GAME_STATE_PENALTY) {
+                        ESP_LOGI(TAG, "Debug Finish button pressed - triggering game finish");
+                        esp_err_t ret = game_finish();
+                        if (ret == ESP_OK) {
+                            buzzer_play_pattern(BUZZER_PATTERN_SUCCESS);
+                            ESP_LOGI(TAG, "Game finished (debug)");
+                        } else {
+                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            ESP_LOGE(TAG, "Failed to finish game: %s", esp_err_to_name(ret));
+                        }
+                    } else {
+                        ESP_LOGW(TAG, "Debug Finish button pressed but game not running (state: %d)", state);
+                    }
+                }
+#else
+                ESP_LOGI(TAG, "Button 4 pressed (debug finish disabled)");
+#endif
                 break;
         }
     } else if (event == BUTTON_EVENT_LONG_PRESS) {
