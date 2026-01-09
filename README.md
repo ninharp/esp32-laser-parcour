@@ -35,13 +35,16 @@ Built with **ESP-IDF 5.4.2** for maximum performance and reliability.
 
 ### User Interface  
 - 📱 **Web interface** - Full game control and monitoring via WiFi
-- 🖥️ **OLED display (32px)** - Shows game status, time, and results
-- 🔘 **Physical buttons** - 4-button control for standalone operation:
+- 🖥️ **OLED display (optional)** - Shows game status, time, and results
+- 🔘 **Physical buttons (optional)** - 4-button control for standalone operation:
   - **Button 1**: Start/Stop/Resume (long press: toggle all lasers)
   - **Button 2**: Pause/Resume during game
-  - **Button 3**: Stop/Reset active game
+  - **Button 3**: Stop/Reset active game, returns to idle screen
   - **Button 4**: Reserved for future use
-- 🎵 **Audio feedback** - Buzzer with multiple sound patterns
+- 🎵 **Audio feedback (optional)** - Buzzer with multiple sound patterns
+- 💾 **SD Card support (optional)** - Custom web interface files from SD card
+
+> ℹ️ **Note**: Display, buttons, buzzer, and SD card are all **optional**. The system works perfectly with just the web interface for full remote control.
 
 ### Display Features
 - 📊 **Game status screens**:
@@ -63,6 +66,8 @@ Built with **ESP-IDF 5.4.2** for maximum performance and reliability.
 - 🏁 **Special finish button display** - Finish buttons shown with 🏁 icon and green border
 - 🌐 **Unit management** - View all connected units (laser and finish button)
 - 📡 **Connection monitoring** - Online/offline status with RSSI indicators
+- 💾 **SD Card web files** - Serve custom HTML/CSS/JS from SD card (optional)
+- 🔄 **Automatic fallback** - Uses internal web interface if SD card unavailable
 
 ### Technical Features
 - 🔧 **Modular component architecture** - Clean separation of concerns
@@ -73,16 +78,22 @@ Built with **ESP-IDF 5.4.2** for maximum performance and reliability.
 - 🎯 **Role-based pairing** - Units identify themselves during pairing
 - 🔄 **Automatic recovery** - Re-pairing after main unit restart
 - ⚙️ **Menuconfig-based setup** - Easy configuration via ESP-IDF menuconfig
+- 💾 **Optional SD Card** - FAT filesystem support for custom web interface
+- 🔌 **Optional peripherals** - Display, buttons, buzzer can be disabled
+- 🌐 **Web-only operation** - System fully functional via WiFi without any physical UI
 
 ## 🛠️ Hardware Requirements
 
 ### Main Unit (CONTROL Module)
 - **Microcontroller**: ESP32-C3-DevKitM-1 or compatible
-- **Display**: 128x32 or 128x64 OLED (SSD1306) via I2C
-- **Audio**: Passive buzzer or small speaker (PWM)
-- **Input**: 4 push buttons (optional, web interface also available)
+- **Display**: 128x32 or 128x64 OLED (SSD1306) via I2C *(optional)*
+- **Audio**: Passive buzzer or small speaker (PWM) *(optional)*
+- **Input**: 4 push buttons *(optional, web interface provides full control)*
+- **SD Card**: MicroSD card reader via SPI *(optional, for custom web files)*
 - **Power**: USB-C or 5V power supply (500mA minimum)
-- **WiFi**: Integrated for web interface (AP mode)
+- **WiFi**: Integrated for web interface (AP mode) **required**
+
+> ⚠️ **Minimum Setup**: Only ESP32-C3 + WiFi required! All other components (display, buttons, buzzer, SD card) are optional for headless web-only operation.
 
 ### Laser Unit (LASER Module) - Per Beam
 - **Microcontroller**: ESP32-C3-DevKitM-1
@@ -108,15 +119,18 @@ Built with **ESP-IDF 5.4.2** for maximum performance and reliability.
 | ESP32-C3-DevKitM-1 | 1 | Main Unit | $3-5 |
 | ESP32-C3-DevKitM-1 | 4-8 | Laser Units | $3-5 each |
 | ESP32-C3-DevKitM-1 | 1 | Finish Button (optional) | $3-5 |
-| OLED Display 128x32/64 | 1 | Main display | $5-8 |
+| OLED Display 128x32/64 | 1 | Main display (optional) | $5-8 |
+| MicroSD Card Module | 1 | Custom web files (optional) | $2-4 |
+| MicroSD Card (any size) | 1 | Storage (optional) | $3-10 |
 | 650nm Laser Module | 4-8 | Beam emitters | $2-4 each |
 | LDR (Light Sensor) | 4-8 | Beam detection | $0.50-1 each |
-| Passive Buzzer | 1 | Audio feedback | $1-2 |
-| Push Buttons | 4-5 | Control input | $0.50 each |
+| Passive Buzzer | 1 | Audio feedback (optional) | $1-2 |
+| Push Buttons | 4-5 | Control input (optional) | $0.50 each |
 | LEDs (various colors) | 10-20 | Status indicators | $0.10 each |
 | Resistors/Capacitors | Various | Electronics | $5-10 |
 | Power Supplies 5V | 5-9 | Power | $3-5 each |
 | **Total (4-beam setup)** | - | - | **$80-150** |
+| **Minimal setup (web-only)** | - | - | **$25-50** |
 
 *Costs are estimates and may vary by supplier and region.*
 
@@ -162,13 +176,17 @@ idf.py build flash monitor
 #### Main Unit (CONTROL)
 | GPIO | Component | Description |
 |------|-----------|-------------|
-| 19 | OLED SDA | I2C Data |
-| 18 | OLED SCL | I2C Clock |
-| 5 | Buzzer | PWM Audio |
-| 1 | Button 1 | Start/Stop/Resume |
-| 3 | Button 2 | Pause/Resume |
-| 7 | Button 3 | Stop/Reset |
-| 6 | Button 4 | Reserved |
+| 19 | OLED SDA | I2C Data *(optional)* |
+| 18 | OLED SCL | I2C Clock *(optional)* |
+| 5 | Buzzer | PWM Audio *(optional)* |
+| 1 | Button 1 | Start/Stop/Resume *(optional)* |
+| 3 | Button 2 | Pause/Resume *(optional)* |
+| 7 | Button 3 | Stop/Reset *(optional)* |
+| 6 | Button 4 | Reserved *(optional)* |
+| 10 | SD CS | SD Card Chip Select *(optional)* |
+| 6 | SD CLK | SD Card Clock *(optional)* |
+| 2 | SD MISO | SD Card Data In *(optional)* |
+| 7 | SD MOSI | SD Card Data Out *(optional)* |
 
 #### Laser Unit (LASER)
 | GPIO | Component | Description |
@@ -257,14 +275,21 @@ Navigate to **"Laser Parcour Configuration"**:
 - **Penalty Time**: Seconds added per beam break (default: 15)
 
 #### Hardware Configuration
-- **Display Type**: SSD1306 / SH1106
-- **I2C Pins**: SDA/SCL for OLED
-- **Button Pins**: GPIO assignments for buttons
-- **Buzzer Pin**: PWM output for audio
+- **Display Type**: SSD1306 / SH1106 *(optional)*
+- **Enable Display**: Checkbox to enable/disable display support
+- **I2C Pins**: SDA/SCL for OLED *(optional)*
+- **Button Pins**: GPIO assignments for buttons *(optional)*
+- **Enable Buttons**: Checkbox to enable/disable button support
+- **Buzzer Pin**: PWM output for audio *(optional)*
+- **Enable Buzzer**: Checkbox to enable/disable buzzer support
+- **Enable SD Card**: Checkbox to enable SD card support *(optional)*
+- **SD Card Pins**: MOSI, MISO, CLK, CS for SPI SD card *(optional)*
 - **Laser Pin**: PWM output for laser (LASER module)
 - **Sensor Pin**: ADC input for LDR (LASER module)
 - **Sensor Threshold**: ADC value (0-4095, default: 2000)
 - **Finish Button Pins**: Button, status LED, illumination LED (FINISH module)
+
+> 💡 **Tip**: Disable unused features in menuconfig to save flash space and RAM!
 
 ## 🌐 Web Interface
 
@@ -279,6 +304,34 @@ Access the web interface by connecting to the main unit's WiFi network:
 - 📊 Live game status and timer
 - 🏁 Unit overview with finish button indicator
 - 📡 Connection status and RSSI monitoring
+
+### Custom Web Interface (SD Card)
+
+You can customize the web interface by using an SD card:
+
+1. **Format SD card** as FAT32
+2. **Create folder structure**:
+   ```
+   /web/
+   ├── index.html    (required)
+   ├── style.css     (optional)
+   ├── script.js     (optional)
+   └── assets/       (optional)
+       ├── logo.png
+       └── sounds/
+   ```
+3. **Enable SD Card** in menuconfig
+4. **Configure SPI pins** for SD card module
+5. **Insert SD card** into main unit
+6. **Reboot** - System automatically detects `/web/index.html`
+
+**Automatic Fallback**: If SD card is missing or `/web/index.html` not found, the system uses the internal web interface.
+
+**Benefits**:
+- Customize UI without reflashing firmware
+- Update web files via file copy
+- Add custom graphics, sounds, or themes
+- Easy A/B testing of different interfaces
 
 ## 🛡️ Safety Features
 
@@ -297,14 +350,16 @@ Access the web interface by connecting to the main unit's WiFi network:
 ## 📚 Component Documentation
 
 ### Core Components
-- **display_manager** - OLED display abstraction (SSD1306/SH1106)
+- **display_manager** - OLED display abstraction (SSD1306/SH1106) *(optional)*
 - **game_logic** - Game state management and scoring
 - **espnow_manager** - ESP-NOW communication layer
 - **laser_control** - Laser PWM control with safety
 - **sensor_manager** - ADC-based beam detection
-- **web_server** - HTTP server with REST API
-- **button_handler** - Physical button input with debouncing
-- **buzzer** - Audio feedback via PWM
+- **web_server** - HTTP server with REST API and SD card file serving
+- **sd_card_manager** - SD card FAT filesystem support *(optional)*
+- **button_handler** - Physical button input with debouncing *(optional)*
+- **buzzer** - Audio feedback via PWM *(optional)*
+- **wifi_ap_manager** - WiFi Access Point management
 
 ### Module Roles
 Each ESP32 can be configured as one of three roles:
@@ -336,6 +391,22 @@ Each ESP32 can be configured as one of three roles:
 - Check main unit is in AP mode
 - Default IP: 192.168.4.1
 - Try rebooting main unit
+
+### SD Card Not Detected
+- Verify SD card is formatted as FAT32
+- Check SPI pin configuration in menuconfig
+- Ensure `/web/index.html` exists on SD card
+- Monitor serial output for SD card mount errors
+- System continues with internal web interface if SD card fails
+- Try different SD card (some cards may be incompatible)
+
+### Game Won't Start (No Laser Units Error)
+- Check that at least one laser unit is powered on
+- Verify laser units have completed pairing (status LED solid)
+- Check ESP-NOW channel matches WiFi channel
+- Monitor web interface for unit online status
+- Error displays on OLED for 5 seconds if no units found
+- Web interface shows "No laser units found" error message
 
 ## 📄 License
 
