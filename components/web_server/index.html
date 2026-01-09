@@ -190,6 +190,7 @@
         function control(cmd) {
             fetch('/api/game/' + cmd, {method: 'POST'}).then(r => r.json()).then(d => {
                 updateStatus();
+                updateUnits();  // Update units list immediately to show LOCKED state
             }).catch(e => console.error('Control error:', e));
         }
         

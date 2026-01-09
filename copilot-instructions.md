@@ -1935,10 +1935,12 @@ main/
 - Lösung 1: `/api/units` gibt jetzt `game_state` und `game_active` zurück
 - Lösung 2: Frontend zeigt Laser als ON während Spiel läuft (für role=1 Units)
 - Lösung 3: ON/OFF Buttons werden disabled und zeigen "🔒 LOCKED" während Spiel
+- Lösung 4: `control()` Funktion ruft `updateUnits()` nach Game Start/Stop auf (sofortiges Update)
 - CSS: `.btn:disabled` Style für deaktivierte Buttons (grau, not-allowed cursor)
 - File: `components/web_server/web_server.c` Lines 452-459
 - File: `components/web_server/index.html` Lines 237-269 (updateUnits function)
 - File: `components/web_server/index.html` Lines 68-75 (disabled button style)
+- File: `components/web_server/index.html` Lines 193-197 (control function with updateUnits)
 
 ---
 
