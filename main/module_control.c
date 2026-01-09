@@ -14,6 +14,8 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "nvs_flash.h"
+#include <dirent.h>
+#include <sys/stat.h>
 
 // Component includes
 #include "display_manager.h"
@@ -36,6 +38,75 @@ static esp_timer_handle_t heartbeat_timer = NULL;
 
 // Last countdown value for buzzer triggering
 static int last_countdown_value = -1;
+
+#ifdef CONFIG_ENABLE_SD_CARD
+/**
+ * List directory contents on SD card
+ */
+static void list_sd_directory(const char *path, int max_files)
+{
+    DIR *dir = opendir(path);
+    if (!dir) {
+        ESP_LOGD(TAG, "    Directory not found: %s", path);
+        return;
+    }
+    
+    ESP_LOGI(TAG, "    Contents of %s:", path);
+    struct dirent *entry;
+    int count = 0;
+    
+    while ((entry = readdir(dir)) != NULL && count < max_files) {
+        // Skip . and ..
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        char full_path[300];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+        
+        struct stat st;
+        if (stat(full_path, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                ESP_LOGI(TAG, "      [DIR]  %s", entry->d_name);
+            } else {
+                ESP_LOGI(TAG, "      [FILE] %s (%ld bytes)", entry->d_name, st.st_size);
+            }
+            count++;
+        }
+    }
+    
+    closedir(dir);
+    
+    if (count == 0) {
+        ESP_LOGI(TAG, "      (empty)");
+    } else if (count >= max_files) {
+        ESP_LOGI(TAG, "      ... (showing first %d entries)", max_files);
+    }
+}
+
+/**
+ * List SD card directory structure
+ */
+static void list_sd_card_structure(void)
+{
+    ESP_LOGI(TAG, "  SD Card Directory Structure:");
+    
+    // List root directory
+    list_sd_directory("/sdcard", 10);
+    
+    // List common directories if they exist
+    const char *important_dirs[] = {
+        "/sdcard/web",
+        "/sdcard/sounds",
+        "/sdcard/logs",
+        "/sdcard/config"
+    };
+    
+    for (int i = 0; i < sizeof(important_dirs) / sizeof(important_dirs[0]); i++) {
+        list_sd_directory(important_dirs[i], 10);
+    }
+}
+#endif
 
 /**
  * Heartbeat timer callback (Main Unit)
@@ -547,6 +618,9 @@ void module_control_init(void)
             } else {
                 ESP_LOGI(TAG, "  No /web directory on SD card, using internal interface");
             }
+            
+            // List SD card directory structure
+            list_sd_card_structure();
         }
         
 #ifdef CONFIG_ENABLE_SOUND_MANAGER
@@ -659,6 +733,12 @@ void module_control_init(void)
     ESP_LOGI(TAG, "Buzzer:         GPIO%d", CONFIG_BUZZER_PIN);
 #else
     ESP_LOGI(TAG, "Buzzer:         Disabled (menuconfig)");
+#endif
+#ifdef CONFIG_ENABLE_SOUND_MANAGER
+    ESP_LOGI(TAG, "I2S Audio:      BCK=GPIO%d, WS=GPIO%d, DOUT=GPIO%d",
+             CONFIG_I2S_BCK_PIN, CONFIG_I2S_WS_PIN, CONFIG_I2S_DATA_OUT_PIN);
+#else
+    ESP_LOGI(TAG, "I2S Audio:      Disabled (menuconfig)");
 #endif
     ESP_LOGI(TAG, "WiFi Channel:   %d", CONFIG_WIFI_CHANNEL);
     ESP_LOGI(TAG, "ESP-NOW Ch:     %d", CONFIG_ESPNOW_CHANNEL);
