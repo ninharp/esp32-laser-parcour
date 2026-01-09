@@ -1896,10 +1896,14 @@ main/
    - ✅ `GAME_STATE_COUNTDOWN`: Case hinzugefügt mit `display_countdown()`
    - ✅ Display init mit `CONFIG_I2C_FREQUENCY`
    - ✅ Button config mit `CONFIG_DEBOUNCE_TIME`
+   - ✅ **Heartbeat-System**: Main Unit sendet alle 5 Sekunden MSG_HEARTBEAT Broadcasts
+   - ✅ `heartbeat_timer_callback`: Hält Laser Unit Safety-Timer am Leben (bereits implementiert)
 
 2. **Laser Module (module_laser.c):**
    - ✅ `espnow_recv_callback_laser`: War bereits korrekt
    - ✅ Initial Pairing Request: Sendet `NULL` statt `&role` (wie im Original)
+   - ✅ `MSG_HEARTBEAT` Handler: Aktualisiert `last_main_unit_heartbeat` bei Main Unit Heartbeats
+   - ✅ Safety Timer: 10 Sekunden (funktioniert mit Main Unit Heartbeats alle 5s)
 
 3. **Finish Module (module_finish.c):**
    - ✅ `button_handler_task`: War bereits korrekt
