@@ -6,773 +6,359 @@ A modular, ESP32-C3 based laser obstacle course game system featuring wireless c
 
 This project implements a distributed laser obstacle course system where players must navigate through laser beams without breaking them. The system consists of multiple ESP32-C3 modules working together:
 
-- **Main Unit**: Central game controller managing game state and coordination
-- **Laser Units**: Combined units that emit laser beams and detect beam interruptions
-- **Display Module**: Shows game status, timer, and scores (integrated in Main Unit)
+- **Main Unit**: Central game controller with OLED display and web interface
+- **Laser Units**: Combined laser emitter and beam detection units  
+- **Finish Button**: Optional finish line button for successful game completion
+- **All modules communicate wirelessly via ESP-NOW** for low-latency, reliable communication
 
-All modules communicate wirelessly using ESP-NOW protocol for low-latency, reliable communication.
-
-Built with **ESP-IDF 5.1+** for maximum performance and reliability.
+Built with **ESP-IDF 5.4.2** for maximum performance and reliability.
 
 ## ✨ Features
 
-### Core Functionality
-- 🎮 **Multi-player support** - Track multiple players and their scores
-- ⏱️ **Real-time timing** - Precise time tracking for speedrun challenges
-- 🔴 **Beam break detection** - Instant detection when lasers are interrupted
-- 📊 **Live scoring system** - Dynamic scoring based on performance
-- 🎵 **Audio feedback** - Sound effects for events (hits, completion, etc.)
-- 💡 **Visual indicators** - LED feedback for game states
+### Game Mechanics
+- ⏱️ **Time-based gameplay** - Time counts UP from zero, penalties add to total time
+- 🎯 **Beam break detection** - Instant detection when lasers are interrupted
+- ⚡ **Penalty system** - 3-second visual penalty display, configurable penalty time added to score
+- 🏁 **Finish button support** - Complete game successfully via dedicated finish button device
+- 🎮 **Multiple completion modes**:
+  - ✅ **SOLVED**: Successfully completed via finish button
+  - ❌ **CANCELED**: Aborted manually via web interface
+  - ⏰ **TIME LIMIT**: Exceeded maximum allowed time
+
+### Hardware Features
+- 🌐 **ESP-NOW mesh network** - Wireless communication between all modules
+- 🔄 **Automatic pairing** - Laser and finish button units auto-discover main unit
+- 📡 **Multi-channel scanning** - Units scan channels 1, 6, 11 for reliable pairing
+- 💓 **Heartbeat system** - 3-second heartbeat for online status monitoring
+- 🔒 **Laser safety mechanism** - Auto-shutdown after 10 seconds without main unit heartbeat
+- 🔋 **Low power optimized** - Efficient ESP32-C3 RISC-V architecture
+
+### User Interface  
+- 📱 **Web interface** - Full game control and monitoring via WiFi
+- 🖥️ **OLED display (32px)** - Shows game status, time, and results
+- 🔘 **Physical buttons** - 4-button control for standalone operation:
+  - **Button 1**: Start/Stop/Resume (long press: toggle all lasers)
+  - **Button 2**: Pause/Resume during game
+  - **Button 3**: Stop/Reset active game
+  - **Button 4**: Reserved for future use
+- 🎵 **Audio feedback** - Buzzer with multiple sound patterns
+
+### Display Features
+- 📊 **Game status screens**:
+  - Welcome/Idle screen
+  - Countdown (3-2-1)
+  - Running game with live time and beam breaks
+  - Penalty notification (3-second display)
+  - Results screen with completion status
+- ✅ **Completion differentiation**:
+  - "GAME COMPLETE!" for successful finish
+  - "GAME CANCELED!" for manual abort or time limit
+- 🕐 **Live time display** - Real-time updates in MM:SS.ms format
+- 📈 **Beam break counter** - Shows total number of beam interruptions
+
+### Web Interface Features
+- 🎮 **Game control** - Start, stop, pause, resume games
+- 🔴 **Laser control** - Individual ON/OFF control for each laser unit
+- 📊 **Live status updates** - Real-time game state and statistics
+- 🏁 **Special finish button display** - Finish buttons shown with 🏁 icon and green border
+- 🌐 **Unit management** - View all connected units (laser and finish button)
+- 📡 **Connection monitoring** - Online/offline status with RSSI indicators
 
 ### Technical Features
-- 🌐 **Wireless mesh network** - ESP-NOW based communication
-- 🔋 **Low power consumption** - Optimized for battery operation
-- 🔧 **Modular architecture** - Easy to add/remove modules
-- 📱 **Web interface** - Configure and monitor via built-in web server
-- 🔄 **OTA updates** - Update firmware wirelessly
-- 📈 **Performance metrics** - Real-time monitoring and statistics
+- 🔧 **Modular component architecture** - Clean separation of concerns
+- 📦 **Three module roles**:
+  - **CONTROL**: Main unit with display and web server
+  - **LASER**: Laser emitter + beam sensor unit
+  - **FINISH**: Finish line button device
+- 🎯 **Role-based pairing** - Units identify themselves during pairing
+- 🔄 **Automatic recovery** - Re-pairing after main unit restart
+- ⚙️ **Menuconfig-based setup** - Easy configuration via ESP-IDF menuconfig
 
 ## 🛠️ Hardware Requirements
 
-### Main Unit
+### Main Unit (CONTROL Module)
 - **Microcontroller**: ESP32-C3-DevKitM-1 or compatible
-- **Display**: 128x64 OLED (SSD1306) via I2C
-- **Audio**: Passive buzzer or small speaker
-- **Input**: 2-4 push buttons for control
+- **Display**: 128x32 or 128x64 OLED (SSD1306) via I2C
+- **Audio**: Passive buzzer or small speaker (PWM)
+- **Input**: 4 push buttons (optional, web interface also available)
 - **Power**: USB-C or 5V power supply (500mA minimum)
+- **WiFi**: Integrated for web interface (AP mode)
 
-### Laser Unit (per beam)
+### Laser Unit (LASER Module) - Per Beam
 - **Microcontroller**: ESP32-C3-DevKitM-1
 - **Laser**: 5V laser diode module (650nm red, <5mW Class 2)
-- **Driver**: Laser driver circuit with safety cutoff
-- **Sensor**: Photoresistor or photodiode with amplifier (integrated in same unit)
-- **Analog Circuit**: Op-amp based signal conditioning
-- **LEDs**: Status indicator LEDs (red/green)
+- **Sensor**: LDR (Light Dependent Resistor) for beam detection
+- **LEDs**: 3 status LEDs (status, green beam OK, red beam broken)
 - **Power**: 5V power supply (250mA per unit)
+- **Safety**: Automatic laser shutdown after 10s without heartbeat
 
-### Optional Components
-- **Mounting Hardware**: Adjustable laser mounts, tripods
-- **Mirrors**: For creating complex beam patterns
-- **Battery Packs**: 18650 Li-ion with boost converter (for portable operation)
-- **Enclosures**: 3D printed or commercial project boxes
+### Finish Button Unit (FINISH Module) - Optional
+- **Microcontroller**: ESP32-C3-DevKitM-1
+- **Button**: Push button (active low with pull-up)
+- **LEDs**: 2 LEDs (status LED, button illumination LED)
+- **Power**: 5V power supply or battery
+- **Function**: Press button to mark successful game completion
 
-### Recommended Tools
-- Soldering iron and supplies
-- Multimeter
-- 3D printer (for custom enclosures)
-- Basic hand tools
+**⚠️ Laser Safety Warning**: Always use appropriate laser safety glasses. Never point lasers at people or reflective surfaces. Use only Class 2 lasers (<1mW, 650nm). Follow local regulations for laser devices.
 
 ## 📋 Bill of Materials (BOM)
 
-| Component | Quantity | Estimated Cost (USD) |
-|-----------|----------|---------------------|
-| ESP32-C3-DevKitM-1 | 5 (1 Main + 4 Laser Units) | $3-5 each |
-| 650nm Laser Module | 4-8 | $2-4 each |
-| OLED Display 128x64 | 1 | $5-8 |
-| Photoresistor/Photodiode | 4-8 (one per Laser Unit) | $1-2 each |
-| Passive Buzzer | 1 | $1-2 |
-| Push Buttons | 4 | $0.50 each |
-| Resistors/Capacitors | Various | $5-10 |
-| Power Supplies | 5 | $3-5 each |
-| **Total (basic 4-beam setup)** | - | **$70-130** |
+| Component | Quantity | Purpose | Estimated Cost (USD) |
+|-----------|----------|---------|---------------------|
+| ESP32-C3-DevKitM-1 | 1 | Main Unit | $3-5 |
+| ESP32-C3-DevKitM-1 | 4-8 | Laser Units | $3-5 each |
+| ESP32-C3-DevKitM-1 | 1 | Finish Button (optional) | $3-5 |
+| OLED Display 128x32/64 | 1 | Main display | $5-8 |
+| 650nm Laser Module | 4-8 | Beam emitters | $2-4 each |
+| LDR (Light Sensor) | 4-8 | Beam detection | $0.50-1 each |
+| Passive Buzzer | 1 | Audio feedback | $1-2 |
+| Push Buttons | 4-5 | Control input | $0.50 each |
+| LEDs (various colors) | 10-20 | Status indicators | $0.10 each |
+| Resistors/Capacitors | Various | Electronics | $5-10 |
+| Power Supplies 5V | 5-9 | Power | $3-5 each |
+| **Total (4-beam setup)** | - | - | **$80-150** |
 
-*Note: Quantities shown are for a basic 4-beam course. Scale up based on desired number of laser beams.*
+*Costs are estimates and may vary by supplier and region.*
 
-## 🚀 Setup Instructions
+## 🚀 Quick Start Guide
 
-### 1. Software Prerequisites
-
-#### ESP-IDF Installation
-
-This project requires ESP-IDF 5.1 or later. Follow the official installation guide:
+### 1. Install ESP-IDF 5.4.2
 
 ```bash
-# Install ESP-IDF prerequisites (Linux/macOS)
+# Install prerequisites
 sudo apt-get install git wget flex bison gperf python3 python3-pip python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
 
-# Clone ESP-IDF
+# Clone ESP-IDF v5.4.2
 mkdir -p ~/esp
 cd ~/esp
-git clone -b v5.1 --recursive https://github.com/espressif/esp-idf.git
+git clone -b v5.4.2 --recursive https://github.com/espressif/esp-idf.git
 
 # Install ESP-IDF
 cd ~/esp/esp-idf
 ./install.sh esp32c3
 
-# Set up the environment (add to ~/.bashrc for persistence)
+# Activate environment
 . ~/esp/esp-idf/export.sh
 ```
 
-For Windows or detailed instructions, visit: https://docs.espressif.com/projects/esp-idf/en/v5.1/esp32c3/get-started/
-
-### 2. Clone the Repository
+### 2. Clone and Build
 
 ```bash
 git clone https://github.com/ninharp/esp32-laser-parcour.git
 cd esp32-laser-parcour
-```
 
-### 3. Configure the Project
-
-Use the ESP-IDF configuration menu to customize settings:
-
-```bash
+# Configure module role
 idf.py menuconfig
-```
+# Navigate to: Laser Parcour Configuration → Module Role
+# Select: Main Unit / Laser Unit / Finish Button
 
-Navigate to **"Laser Parcour Configuration"** to set:
-
-- Module type (Main Unit or Laser Unit)
-- Module ID (unique identifier 1-255)
-- WiFi credentials (for web interface)
-- Game parameters (timing, scoring)
-- ESP-NOW network settings
-- Pin assignments
-
-Or edit `sdkconfig.defaults` directly for default values.
-
-### 4. Build the Firmware
-
-```bash
-# Set target to ESP32-C3
+# Build and flash
 idf.py set-target esp32c3
-
-# Build the project
-idf.py build
+idf.py build flash monitor
 ```
 
-### 5. Flash and Monitor
+### 3. Pin Configuration
 
-```bash
-# Flash to device and open serial monitor
-idf.py -p /dev/ttyUSB0 flash monitor
+#### Main Unit (CONTROL)
+| GPIO | Component | Description |
+|------|-----------|-------------|
+| 19 | OLED SDA | I2C Data |
+| 18 | OLED SCL | I2C Clock |
+| 5 | Buzzer | PWM Audio |
+| 1 | Button 1 | Start/Stop/Resume |
+| 3 | Button 2 | Pause/Resume |
+| 7 | Button 3 | Stop/Reset |
+| 6 | Button 4 | Reserved |
 
-# Press Ctrl+] to exit monitor
+#### Laser Unit (LASER)
+| GPIO | Component | Description |
+|------|-----------|-------------|
+| 2 | Laser Diode | PWM Control |
+| 4 | LDR Sensor | ADC Input (threshold: 2000) |
+| 21 | Status LED | Connection status |
+| 20 | Green LED | Beam detected |
+| 10 | Red LED | Beam broken |
+
+#### Finish Button (FINISH)
+| GPIO | Component | Description |
+|------|-----------|-------------|
+| 5 | Button | Active low input |
+| 21 | Status LED | Pairing/connection |
+| 20 | Button LED | Illumination (turns off when pressed) |
+
+*All pin assignments configurable via menuconfig*
+
+## 🎮 How to Play
+
+1. **Power on all units** - Main unit and all laser units
+2. **Wait for pairing** - Units automatically find and pair with main unit
+3. **Connect to WiFi** - Default SSID: "ESP32-LaserParcour"
+4. **Open web interface** - Navigate to http://192.168.4.1
+5. **Start game** - Via web interface or Button 1 on main unit
+6. **Navigate course** - Avoid breaking laser beams
+7. **Reach finish button** - Press finish button to complete successfully
+8. **View results** - Display shows total time and beam breaks
+
+### Scoring System
+- **Time counts UP** from 0:00
+- **Each beam break** adds penalty time (default: 15 seconds)
+- **Final score** = Total time (including all penalties)
+- **Lower time = better score**
+
+## 📡 System Architecture
+
+### Communication Flow
+```
+Main Unit (CONTROL)
+    ├── ESP-NOW Channel (1, 6, or 11)
+    ├── WiFi AP Mode (192.168.4.1)
+    │
+    ├─→ Laser Unit 1 (LASER) ──→ Heartbeat every 3s
+    ├─→ Laser Unit 2 (LASER) ──→ Beam break messages
+    ├─→ Laser Unit N (LASER) ──→ Auto-pairing
+    │
+    └─→ Finish Button (FINISH) ─→ MSG_FINISH_PRESSED on button press
 ```
 
-Replace `/dev/ttyUSB0` with your serial port:
-- Linux: `/dev/ttyUSB0` or `/dev/ttyACM0`
-- macOS: `/dev/cu.usbserial-*`
-- Windows: `COM3`, `COM4`, etc.
+### Message Types
+- **MSG_GAME_START** (0x01) - Start game, turn on lasers
+- **MSG_GAME_STOP** (0x02) - Stop game, turn off lasers
+- **MSG_BEAM_BROKEN** (0x03) - Beam interrupted notification
+- **MSG_HEARTBEAT** (0x06) - Keep-alive every 3 seconds
+- **MSG_PAIRING_REQUEST** (0x07) - Auto-discovery message
+- **MSG_PAIRING_RESPONSE** (0x08) - Pairing acknowledgment
+- **MSG_LASER_ON/OFF** (0x09/0x0A) - Manual laser control
+- **MSG_RESET** (0x0C) - Reset module state
+- **MSG_FINISH_PRESSED** (0x0F) - Finish button pressed
 
-### 6. Hardware Wiring
+## 🔧 Advanced Configuration
 
-#### Main Unit
-
-| ESP32-C3 Pin | Component | Description |
-|--------------|-----------|-------------|
-| GPIO8 | OLED SDA | I2C Data Line |
-| GPIO9 | OLED SCL | I2C Clock Line |
-| GPIO5 | Buzzer | Audio Output (PWM) |
-| GPIO2 | Button 1 | Start/Stop |
-| GPIO3 | Button 2 | Mode Select |
-| GPIO4 | Button 3 | Reset |
-| GPIO6 | Button 4 | Confirm |
-| 5V | VCC | Power Supply |
-| GND | GND | Ground |
-
-#### Laser Unit (Combined Laser + Sensor)
-
-| ESP32-C3 Pin | Component | Description |
-|--------------|-----------|-------------|
-| GPIO10 | Laser Module | Laser Control (PWM) |
-| GPIO0 | Photoresistor | Analog Input (ADC1_CH0) |
-| GPIO1 | LED Green | Beam Detected Indicator |
-| GPIO2 | LED Red | Beam Broken / Status LED |
-| 5V | VCC | Power Supply |
-| GND | GND | Ground |
-
-**⚠️ Laser Safety Warning**: Always use appropriate laser safety glasses. Never point lasers at people or reflective surfaces. Use only Class 2 lasers (<1mW, 650nm). Follow local regulations for laser devices.
-
-### 7. Module Configuration
-
-Each ESP32 module needs to be flashed with the appropriate role configuration:
-
-**For Main Unit:**
-```bash
-idf.py menuconfig
-# Navigate to: Laser Parcour Configuration → Module Settings
-# Set Module Role: Main Unit
-# Set Module ID: 1
-idf.py build flash
-```
-
-**For Laser Units:**
-```bash
-idf.py menuconfig
-# Set Module Role: Laser Unit
-# Set Module ID: 2, 3, 4... (unique for each laser unit)
-idf.py build flash
-```
-
-### 8. Initial System Setup
-
-1. **Power on the Main Unit** - It will create WiFi AP: `ESP32-LaserParcour`
-2. **Connect to the AP** - Password: `lasergame` (configurable in menuconfig)
-3. **Access Web Interface** - Navigate to http://192.168.4.1
-4. **Power on Laser Units** - They will auto-pair via ESP-NOW
-5. **Verify connectivity** - Check web interface for connected modules
-6. **Align hardware** - Position laser units, test beam detection
-
-## 🏗️ Architecture Overview
-
-### System Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      Main Unit                          │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
-│  │ Game     │  │ ESP-NOW  │  │ Web      │             │
-│  │ Logic    │←→│ Manager  │  │ Server   │             │
-│  └──────────┘  └──────────┘  └──────────┘             │
-│       ↓              ↓              ↓                   │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
-│  │ Display  │  │ Audio    │  │ Storage  │             │
-│  └──────────┘  └──────────┘  └──────────┘             │
-└─────────────────────────────────────────────────────────┘
-                          ↓ ESP-NOW
-                    ┌─────┴─────┐
-                    ↓           ↓
-            ┌───────────────────────────┐
-            │    Laser Units (1-N)      │
-            │  ┌─────────┐  ┌─────────┐ │
-            │  │ Laser   │  │ Photo   │ │
-            │  │ Control │  │ Detector│ │
-            │  └─────────┘  └─────────┘ │
-            │  ┌─────────┐  ┌─────────┐ │
-            │  │ Safety  │  │ Signal  │ │
-            │  │ Monitor │  │ Process │ │
-            │  └─────────┘  └─────────┘ │
-            └───────────────────────────┘
-```
-
-### Communication Protocol
-
-The system uses ESP-NOW for fast, peer-to-peer communication:
-
-```c
-// Message Structure
-typedef struct {
-    uint8_t msg_type;      // Command type
-    uint8_t module_id;     // Source module ID
-    uint32_t timestamp;    // Message timestamp (ms)
-    uint8_t data[32];      // Payload data
-    uint16_t checksum;     // CRC16 data integrity check
-} game_message_t;
-```
-
-**Message Types:**
-
-- `MSG_GAME_START` - Initiate game session
-- `MSG_GAME_STOP` - End game session
-- `MSG_BEAM_BROKEN` - Laser beam interruption detected
-- `MSG_STATUS_UPDATE` - Periodic status report (every 100ms)
-- `MSG_CONFIG_UPDATE` - Configuration changes
-- `MSG_HEARTBEAT` - Keep-alive signal (every 1s)
-- `MSG_PAIRING_REQUEST` - Module wants to join network
-- `MSG_PAIRING_RESPONSE` - Pairing accepted/rejected
-
-### State Machine
-
-```
-     [IDLE] ──start──→ [READY] ──begin──→ [RUNNING]
-       ↑                                       │
-       │                                       │ beam_broken
-       │                                       ↓
-       │                                   [PENALTY]
-       │                                       │
-       │                                       │ resume
-       │                                       ↓
-       └──finish/timeout──────────────────[COMPLETE]
-```
-
-## 📁 Project Structure
-
-```
-esp32-laser-parcour/
-├── CMakeLists.txt            # Main build configuration
-├── sdkconfig.defaults        # Default ESP-IDF configuration
-├── partitions.csv            # Flash partition table
-├── main/
-│   ├── CMakeLists.txt        # Main component build config
-│   ├── main.c                # Application entry point
-│   ├── Kconfig.projbuild     # Configuration menu definitions
-│   └── idf_component.yml     # Component dependencies
-├── components/
-│   ├── game_logic/           # Game state management
-│   │   ├── CMakeLists.txt
-│   │   ├── include/
-│   │   │   └── game_logic.h
-│   │   └── game_logic.c
-│   ├── espnow_manager/       # ESP-NOW communication layer
-│   │   ├── CMakeLists.txt
-│   │   ├── include/
-│   │   │   └── espnow_manager.h
-│   │   └── espnow_manager.c
-│   ├── laser_control/        # Laser module control
-│   │   ├── CMakeLists.txt
-│   │   ├── include/
-│   │   │   └── laser_control.h
-│   │   └── laser_control.c
-│   ├── sensor_manager/       # Sensor data processing
-│   │   ├── CMakeLists.txt
-│   │   ├── include/
-│   │   │   └── sensor_manager.h
-│   │   └── sensor_manager.c
-│   └── display_manager/      # OLED display and UI
-│       ├── CMakeLists.txt
-│       ├── include/
-│       │   └── display_manager.h
-│       └── display_manager.c
-├── docs/
-│   ├── hardware/             # Schematics and PCB files
-│   ├── api/                  # API documentation
-│   └── images/               # Photos and diagrams
-└── README.md                 # This file
-```
-
-## 🔧 Configuration
-
-### Module Configuration via menuconfig
-
-Access configuration menu:
+### Menuconfig Options
 
 ```bash
 idf.py menuconfig
 ```
 
-Key configuration options under **"Laser Parcour Configuration"**:
+Navigate to **"Laser Parcour Configuration"**:
 
 #### Module Settings
-- **Module Role**: Main Unit / Laser Unit
-- **Module ID**: 1-255 (must be unique)
-- **Device Name**: Custom name for identification
+- **Module Role**: CONTROL / LASER / FINISH
+- **Module ID**: 1-255 (unique identifier)
+- **Device Name**: Custom name for web interface
 
 #### Network Settings
-- **WiFi SSID**: Access point name (Main Unit only)
-- **WiFi Password**: AP password (minimum 8 characters)
-- **ESP-NOW Channel**: 1-13 (all modules must match)
-- **Max Paired Devices**: Maximum connected modules (default: 20)
+- **WiFi SSID**: Access point name (default: ESP32-LaserParcour)
+- **WiFi Password**: Access point password
+- **WiFi Channel**: 1-13 (must match ESP-NOW channel)
+- **ESP-NOW Channel**: 1, 6, or 11 recommended
 
 #### Game Parameters
-- **Game Duration**: Default game time in seconds (180)
-- **Penalty Time**: Time penalty per beam break in seconds (5)
-- **Countdown Duration**: Pre-game countdown in seconds (5)
-- **Base Score**: Starting score (1000)
-- **Time Bonus Multiplier**: Points per second remaining (10)
-- **Penalty Points**: Points deducted per beam break (-50)
+- **Max Time**: Maximum game duration (0 = unlimited)
+- **Penalty Time**: Seconds added per beam break (default: 15)
 
 #### Hardware Configuration
-- **OLED Display Type**: SSD1306 / SH1106
-- **I2C SDA Pin**: GPIO for I2C data (default: 8)
-- **I2C SCL Pin**: GPIO for I2C clock (default: 9)
-- **Buzzer Pin**: GPIO for audio output (default: 5)
-- **Laser Pin**: GPIO for laser control (default: 10)
-- **Sensor Pin**: ADC channel for photoresistor (default: GPIO0)
-- **Sensor Threshold**: ADC threshold for beam detection (0-4095, default: 500)
-- **Debounce Time**: Debounce delay in ms (default: 100)
+- **Display Type**: SSD1306 / SH1106
+- **I2C Pins**: SDA/SCL for OLED
+- **Button Pins**: GPIO assignments for buttons
+- **Buzzer Pin**: PWM output for audio
+- **Laser Pin**: PWM output for laser (LASER module)
+- **Sensor Pin**: ADC input for LDR (LASER module)
+- **Sensor Threshold**: ADC value (0-4095, default: 2000)
+- **Finish Button Pins**: Button, status LED, illumination LED (FINISH module)
 
-### Configuration via sdkconfig.defaults
+## 🌐 Web Interface
 
-Alternatively, edit `sdkconfig.defaults` for persistent settings:
-
-```ini
-# Module Configuration
-CONFIG_MODULE_ROLE_CONTROL=y
-CONFIG_MODULE_ID=1
-
-# Network Settings
-CONFIG_WIFI_SSID="ESP32-LaserParcour"
-CONFIG_WIFI_PASSWORD="lasergame"
-CONFIG_ESPNOW_CHANNEL=1
-
-# Game Parameters
-CONFIG_GAME_DURATION=180
-CONFIG_PENALTY_TIME=5
-CONFIG_BASE_SCORE=1000
-
-# Hardware Configuration  
-CONFIG_I2C_SDA_PIN=8
-CONFIG_I2C_SCL_PIN=9
-CONFIG_BUZZER_PIN=5
-CONFIG_LASER_PIN=10
-CONFIG_SENSOR_PIN=0
-CONFIG_SENSOR_THRESHOLD=500
-```
-
-## 🎮 Usage
-
-### Starting a Game
-
-1. **Power On**: Ensure all modules are powered and paired (check web interface)
-2. **Mode Selection**: Press Mode button (Button 2) to cycle through:
-   - Single Player Speed Run
-   - Multi-Player Challenge
-   - Training Mode (no penalties)
-   - Custom Game (configurable duration and rules)
-3. **Start**: Press Start button (Button 1) to begin countdown
-4. **Play**: Navigate through the laser beams without breaking them
-5. **Results**: View time, penalties, and final score on the OLED display
-
-### Game Modes
-
-#### Single Player Speed Run
-- **Objective**: Complete the course as fast as possible
-- **Penalty**: 5-second time penalty for each beam break
-- **Scoring**: Based on completion time minus penalties
-- **Leaderboard**: Best times saved to flash memory
-
-#### Multi-Player Challenge
-- **Objective**: Lowest score wins (time + penalties)
-- **Players**: Up to 8 players can compete
-- **Turns**: Each player takes turns on the course
-- **Scoring**: Time in seconds + (beam breaks × 5)
-
-#### Training Mode
-- **Objective**: Practice without pressure
-- **Penalties**: No time penalties or score deductions
-- **Feedback**: Visual and audio feedback on beam breaks
-- **Stats**: Track progress and improvement over time
-
-#### Custom Game
-- **Duration**: Set custom game duration (60-600 seconds)
-- **Penalties**: Configure custom penalty values
-- **Difficulty**: Adjust sensor sensitivity
-- **Rules**: Enable/disable various game mechanics
-
-### Button Controls
-
-| Button | Short Press | Long Press (2s) |
-|--------|-------------|-----------------|
-| Button 1 (GPIO2) | Start/Pause Game | Stop Game & Return to Menu |
-| Button 2 (GPIO3) | Next Mode | Previous Mode |
-| Button 3 (GPIO4) | Reset Current Score | Clear All Scores |
-| Button 4 (GPIO6) | Confirm Selection | System Reset |
-
-### LED Status Indicators
-
-**Main Unit:**
-- No dedicated status LED (uses OLED display)
-
-**Laser Units:**
-
-| LED State | Meaning |
-|-----------|---------|
-| 🔴 Solid Red | Pairing mode / Not connected |
-| 🟢 Solid Green | Connected and ready |
-| 🟡 Blinking Yellow | Active game in progress |
-| 🔵 Fast Blink Blue | Receiving configuration |
-
-The green LED on the Laser Unit also indicates when the beam is detected (normal operation), while the red LED indicates when the beam is broken (triggered).
-
-## 📡 Web Interface
-
-Access the web interface by connecting to the Main Unit's WiFi network and navigating to `http://192.168.4.1`.
+Access the web interface by connecting to the main unit's WiFi network:
+- **SSID**: ESP32-LaserParcour (configurable)
+- **Password**: lasergame (configurable)
+- **URL**: http://192.168.4.1
 
 ### Features
+- 🎮 Game control (start, stop, pause, resume)
+- 🔴 Individual laser ON/OFF control
+- 📊 Live game status and timer
+- 🏁 Unit overview with finish button indicator
+- 📡 Connection status and RSSI monitoring
 
-**Dashboard:**
-- Real-time game status
-- Connected modules overview
-- Current scores and times
-- Active player information
+## 🛡️ Safety Features
 
-**Module Management:**
-- View all paired modules
-- Module health monitoring
-- Signal strength (RSSI)
-- Battery status (if applicable)
-- Assign module roles and IDs
+### Laser Safety
+- ✅ **Automatic shutdown** - Laser turns off after 10 seconds without heartbeat
+- ✅ **Safety timeout** - Hardware safety timeout on laser control component
+- ✅ **Visual warnings** - Red LED indicates safety shutdown
+- ✅ **Low power lasers** - Only Class 2 lasers (<1mW) supported
 
-**Game Configuration:**
-- Select game modes
-- Adjust timing parameters
-- Configure scoring rules
-- Set difficulty levels
+### System Safety
+- ✅ **Heartbeat monitoring** - Continuous connection monitoring
+- ✅ **Automatic recovery** - Units re-pair after connection loss
+- ✅ **Error logging** - Detailed logs for debugging
+- ✅ **Fail-safe defaults** - Conservative default settings
 
-**Statistics:**
-- Historical game data
-- Player leaderboards
-- Average completion times
-- Beam break statistics
-- Performance graphs
+## 📚 Component Documentation
 
-**System:**
-- Firmware version information
-- OTA firmware updates
-- Factory reset
-- Export/import configuration
-- System logs and diagnostics
+### Core Components
+- **display_manager** - OLED display abstraction (SSD1306/SH1106)
+- **game_logic** - Game state management and scoring
+- **espnow_manager** - ESP-NOW communication layer
+- **laser_control** - Laser PWM control with safety
+- **sensor_manager** - ADC-based beam detection
+- **web_server** - HTTP server with REST API
+- **button_handler** - Physical button input with debouncing
+- **buzzer** - Audio feedback via PWM
 
-## 🔧 Troubleshooting
+### Module Roles
+Each ESP32 can be configured as one of three roles:
+1. **CONTROL** - Main unit (display, web server, game logic)
+2. **LASER** - Laser emitter + beam sensor
+3. **FINISH** - Finish line button device
 
-### Module Not Pairing
+## 🐛 Troubleshooting
 
-**Problem**: Laser unit won't connect to main unit
+### Laser Units Won't Pair
+- Check ESP-NOW channel matches WiFi channel
+- Units scan channels 1, 6, 11 automatically
+- Wait 10-15 seconds for multi-channel scanning
+- Check module ID is unique (1-255)
 
-**Solutions**:
-- Verify all modules are on the same ESP-NOW channel (check menuconfig)
-- Check that main unit WiFi AP is active
-- Ensure modules are within ESP-NOW range (< 200m outdoor, < 100m indoor)
-- Reset both devices (long press Button 4)
-- Check serial monitor for pairing errors: `idf.py monitor`
-- Verify MAC addresses are being exchanged correctly
+### Laser Not Detecting Beams
+- Verify sensor threshold (default: 2000)
+- Check LDR connections
+- Monitor ADC values in serial output
+- LDR should read ~850 without laser, ~4095 with laser
 
-### Inconsistent Beam Detection
+### Display Shows Wrong Time/Breaks
+- Verify game state in web interface
+- Check heartbeat messages in serial log
+- Ensure main unit is receiving beam break messages
 
-**Problem**: Sensor triggers randomly or doesn't detect breaks
+### Web Interface Not Accessible
+- Verify WiFi credentials in menuconfig
+- Check main unit is in AP mode
+- Default IP: 192.168.4.1
+- Try rebooting main unit
 
-**Solutions**:
-- Adjust sensor threshold in menuconfig or web interface
-- Ensure laser is properly aligned with photoresistor
-- Check for ambient light interference (add light shield to sensor)
-- Verify ADC readings: use `idf.py monitor` and check sensor values
-- Clean laser lens and sensor window
-- Verify power supply is stable (5V ±5%, minimum 2A total)
-- Increase debounce time in configuration
+## 📄 License
 
-### OLED Display Not Working
-
-**Problem**: Display remains blank or shows garbage
-
-**Solutions**:
-- Check I2C connections (ensure SDA/SCL not swapped)
-- Verify I2C address (default 0x3C, some displays use 0x3D)
-- Test I2C bus: `idf.py monitor` and check for I2C init messages
-- Ensure pull-up resistors are present (usually on-board, or add 4.7kΩ)
-- Try different OLED display type in menuconfig (SSD1306 vs SH1106)
-- Check power supply to display (3.3V or 5V depending on model)
-- Verify I2C clock speed (default 100kHz, try lowering if issues persist)
-
-### WiFi Configuration Issues
-
-**Problem**: Can't connect to web interface
-
-**Solutions**:
-- Verify AP mode is enabled in menuconfig (Main Unit only)
-- Check serial monitor for WiFi initialization logs
-- Restart the main unit (power cycle)
-- Manually connect to WiFi SSID from menuconfig
-- Verify WiFi channel is not congested (try different channel)
-- Check if another device is using IP 192.168.4.1
-- Try factory reset: Hold Button 3 + Button 4 during boot
-
-### Build Errors
-
-**Problem**: Compilation fails or dependency issues
-
-**Solutions**:
-```bash
-# Clean build directory
-idf.py fullclean
-
-# Reconfigure target
-idf.py set-target esp32c3
-
-# Reconfigure project
-idf.py reconfigure
-
-# Rebuild
-idf.py build
-```
-
-**Common issues:**
-- ESP-IDF version mismatch: This project requires v5.1 or later
-- Environment not sourced: Run `. ~/esp/esp-idf/export.sh`
-- Missing dependencies: Run `cd ~/esp/esp-idf && ./install.sh esp32c3`
-- Corrupted sdkconfig: Delete `sdkconfig` and run `idf.py menuconfig`
-
-### ESP-NOW Communication Failures
-
-**Problem**: Modules don't receive messages or high packet loss
-
-**Solutions**:
-- Check ESP-NOW channel matches across all modules
-- Verify WiFi isn't in use simultaneously (ESP-NOW and WiFi share radio)
-- Reduce distance between modules or add better antennas
-- Check for WiFi interference on the selected channel
-- Monitor RSSI values in web interface
-- Increase ESP-NOW retry count in code
-- Verify MAC addresses are correctly stored
-- Check that maximum peer limit isn't exceeded (default 20)
-
-### Laser Safety Cutoff Triggering
-
-**Problem**: Laser shuts off unexpectedly
-
-**Solutions**:
-- This is a safety feature - check why it's triggering
-- Verify laser current isn't exceeding limits
-- Check for overheating (add heatsink if needed)
-- Ensure proper ventilation around laser unit
-- Verify power supply can handle current spikes
-- Check safety circuit connections and thresholds
-- Review system logs for safety event details
-
-## 🔒 Safety Considerations
-
-### ⚠️ IMPORTANT SAFETY INFORMATION
-
-**Laser Safety:**
-
-- **Use only Class 2 lasers** (<1mW, 650nm) - Safe for accidental brief exposure
-- **Never point lasers at eyes or reflective surfaces** that could redirect the beam
-- **Post warning signs** in the play area: "LASER IN USE - DO NOT STARE INTO BEAM"
-- **Install emergency stop button** connected to all laser modules
-- **Use laser safety glasses** (OD 3+ for 650nm) during setup and maintenance
-- **Keep lasers at least 2m above ground** to avoid eye-level exposure
-- **Implement automatic timeout** - lasers turn off after 10 minutes
-- **Add beam terminators** at the end of each laser path
-
-**Electrical Safety:**
-
-- Use **proper power supplies with overcurrent protection** (minimum 2A, 5V regulated)
-- **Insulate all exposed connections** with heat shrink tubing or electrical tape
-- **Keep electronics away from water** - use weatherproof enclosures if outdoor
-- **Add fuses** on all power supply lines (1A fast-blow recommended)
-- **Use proper wire gauges** - minimum 22 AWG for power, 24 AWG for signals
-- **Implement reverse polarity protection** on all power inputs
-- **Ground all metal enclosures** properly to prevent static discharge
-
-**Physical Safety:**
-
-- **Ensure stable mounting** of all equipment - use proper stands or wall mounts
-- **Mark laser paths clearly** with caution tape or barriers
-- **Provide adequate lighting** in play area for safe navigation
-- **Install padding** around obstacles or sharp edges
-- **Supervise all gameplay sessions** - do not leave system unattended when active
-- **Create clear entry/exit paths** that don't cross active beams
-- **Implement motion sensors** to detect people outside play area
-- **Secure all cables** to prevent tripping hazards
-
-**Software Safety:**
-
-- **Watchdog timers** monitor all modules and reset if frozen
-- **Fail-safe defaults** - system defaults to safe state on error
-- **Timeout mechanisms** - automatic shutdown after inactivity
-- **Health monitoring** - continuous checks of all modules
-- **Emergency stop protocol** - immediate shutdown on any safety trigger
+This project is licensed under the MIT License - see LICENSE file for details.
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
 
-### How to Contribute
+## 📮 Contact
 
-1. **Fork the repository**
-2. **Create your feature branch** (`git checkout -b feature/AmazingFeature`)
-3. **Commit your changes** (`git commit -m 'Add some AmazingFeature'`)
-4. **Push to the branch** (`git push origin feature/AmazingFeature`)
-5. **Open a Pull Request**
+- **Author**: ninharp
+- **Project**: https://github.com/ninharp/esp32-laser-parcour
+- **Issues**: https://github.com/ninharp/esp32-laser-parcour/issues
 
-### Development Guidelines
+## 🎉 Acknowledgments
 
-- Follow ESP-IDF coding standards and style guide
-- Add comprehensive comments for complex logic
-- Test on actual hardware before submitting PR
-- Update documentation for new features
-- Keep commits atomic and well-described
-- Run `idf.py build` to ensure no compilation errors
-- Check for memory leaks with `idf.py monitor`
-- Follow existing code structure and patterns
-
-### Areas for Contribution
-
-- Additional game modes
-- Mobile app development
-- Web interface improvements
-- Hardware schematics and PCB designs
-- 3D printable enclosures
-- Documentation and tutorials
-- Translations
-- Bug fixes and optimizations
-
-## 📄 License
-
-This project is licensed under the MIT License:
-
-```
-MIT License
-
-Copyright (c) 2025 ninharp
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-## 👤 Author
-
-**ninharp**
-
-- GitHub: [@ninharp](https://github.com/ninharp)
-- Email: sauer.uetersen@gmail.com
-
-## 🙏 Acknowledgments
-
-- **Espressif Systems** - For the ESP-IDF framework and ESP32-C3 platform
-- **ESP32 Community** - For examples, libraries, and support
-- **Open Source Contributors** - For OLED libraries, ESP-NOW examples, and more
-- **Testers and Early Adopters** - For feedback and bug reports
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/ninharp/esp32-laser-parcour/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ninharp/esp32-laser-parcour/discussions)
-- **Email**: sauer.uetersen@gmail.com
-- **Documentation**: Check the `/docs` folder for additional resources
-
-## 🗺️ Roadmap
-
-### Version 1.0 (Current)
-- [x] Basic game logic implementation
-- [x] ESP-NOW communication
-- [x] OLED display support
-- [x] Multiple game modes
-- [x] Web interface for configuration
-
-### Version 1.1 (Planned)
-- [ ] Mobile app for remote control (Android/iOS)
-- [ ] Additional game modes (time trial, survival, obstacle course)
-- [ ] Sound effects and music support
-- [ ] Improved LED animations
-- [ ] Battery monitoring and low-power modes
-
-### Version 2.0 (Future)
-- [ ] Cloud leaderboard integration
-- [ ] Tournament mode with bracket management
-- [ ] Advanced pattern programming for lasers
-- [ ] RGB laser support for difficulty levels
-- [ ] Multi-language support
-- [ ] Replay system with video recording
-- [ ] AI-powered difficulty adjustment
-- [ ] Integration with gaming platforms
-
-### Hardware Roadmap
-- [ ] Custom PCB designs for Main Unit and Laser Units
-- [ ] 3D printable enclosures and mounts
-- [ ] Integrated battery packs with charging
-- [ ] Weatherproof outdoor versions
-- [ ] Modular expansion system
+- ESP-IDF framework by Espressif Systems
+- SSD1306 OLED driver community
+- ESP-NOW protocol developers
 
 ---
 
-**Last Updated:** January 2025
-
-**Status:** Active Development
-
-**Made with ❤️ by ninharp**
+**Version**: 1.0.0 (January 2026)  
+**ESP-IDF**: 5.4.2  
+**Target**: ESP32-C3 (RISC-V)

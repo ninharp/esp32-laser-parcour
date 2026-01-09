@@ -14,6 +14,33 @@ Ein modulares, ESP32-C3 basiertes Laser-Hindernisparcours-Spielsystem mit drahtl
 
 ---
 
+## 📝 Dokumentations-Regeln
+
+**WICHTIG:** Bei jeder signifikanten Code-Änderung MUSS die README.md aktualisiert werden!
+
+**Signifikante Änderungen umfassen:**
+- ✅ Neue Features oder Komponenten
+- ✅ Geänderte Funktionalität
+- ✅ Neue Hardware-Anforderungen
+- ✅ Geänderte Pin-Zuweisungen
+- ✅ Update von Abhängigkeiten oder Versionen
+- ✅ Neue Menuconfig-Optionen
+- ✅ Sicherheitsmechanismen oder Safety Features
+- ✅ Neue Modulrollen oder Gerätetypen
+- ✅ Änderungen am Kommunikationsprotokoll (ESP-NOW Messages)
+- ✅ Web-Interface-Änderungen
+
+**README Update Checkliste:**
+1. Feature-Liste aktualisieren (✨ Features Sektion)
+2. Hardware-Anforderungen prüfen (🛠️ Hardware Requirements)
+3. Pin-Konfigurationen aktualisieren (GPIO Tables)
+4. Menuconfig-Optionen dokumentieren (🔧 Advanced Configuration)
+5. Troubleshooting erweitern bei bekannten Problemen
+6. System Architecture aktualisieren bei Protokolländerungen
+7. Version und Datum am Ende aktualisieren
+
+---
+
 ## 🏗️ Projektstruktur
 
 ```
