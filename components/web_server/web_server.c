@@ -492,6 +492,21 @@ static esp_err_t units_control_handler(httpd_req_t *req)
     uint8_t module_id = (uint8_t)id_item->valueint;
     const char *action = action_item->valuestring;
     
+    // Check if game is running - block manual laser control during game
+    extern game_state_t game_get_state(void);
+    game_state_t state = game_get_state();
+    
+    // Block laser_on/laser_off during active game (RUNNING, COUNTDOWN, PENALTY, PAUSED)
+    if ((strcmp(action, "laser_on") == 0 || strcmp(action, "laser_off") == 0) &&
+        (state == GAME_STATE_RUNNING || state == GAME_STATE_COUNTDOWN || 
+         state == GAME_STATE_PENALTY || state == GAME_STATE_PAUSED)) {
+        cJSON_Delete(json);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, "{\"error\":\"Cannot control laser during active game\"}", HTTPD_RESP_USE_STRLEN);
+        ESP_LOGW(TAG, "Laser control blocked - game is active (state: %d)", state);
+        return ESP_OK;
+    }
+    
     extern esp_err_t game_control_laser(uint8_t module_id, bool laser_on, uint8_t intensity);
     extern esp_err_t game_reset_laser_unit(uint8_t module_id);
     

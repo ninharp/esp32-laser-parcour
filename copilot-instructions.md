@@ -1922,6 +1922,14 @@ main/
 - `button_configs` → `buttons` (korrekte Variable)
 - Redundante `#else #endif` Blöcke entfernt
 
+**Web-Interface Sicherheit (2026-01-09):**
+- Problem: Manuelle Laser-Steuerung war während eines laufenden Spiels möglich
+- Lösung: `units_control_handler` prüft jetzt den Game-State
+- Blockiert: `laser_on` und `laser_off` während RUNNING, COUNTDOWN, PENALTY, PAUSED
+- Erlaubt: `reset` ist immer möglich (auch während Spiel)
+- Error-Response: `{"error":"Cannot control laser during active game"}`
+- File: `components/web_server/web_server.c` Lines 495-509
+
 ---
 
 ## 🔧 Best Practices
