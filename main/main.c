@@ -662,7 +662,12 @@ static bool is_game_mode = false;  // Track if in game mode (vs manual laser con
 static esp_timer_handle_t pairing_timer = NULL;
 static esp_timer_handle_t heartbeat_timer = NULL;
 static esp_timer_handle_t led_blink_timer = NULL;
+static esp_timer_handle_t safety_timer = NULL;  // Safety timer to monitor main unit heartbeat
 static uint8_t main_unit_mac[6] = {0};  // MAC address of paired main unit
+
+// Safety mechanism
+static int64_t last_main_unit_heartbeat = 0;  // Timestamp of last heartbeat from main unit
+static const int64_t HEARTBEAT_TIMEOUT_US = 10000000;  // 10 seconds in microseconds
 
 // Channel scanning state
 static uint8_t current_scan_channel = CONFIG_ESPNOW_CHANNEL;
@@ -696,6 +701,44 @@ static void heartbeat_timer_callback(void *arg)
         ESP_LOGI(TAG, "Heartbeat sent to main unit: %s", esp_err_to_name(ret));
     } else {
         ESP_LOGW(TAG, "Heartbeat timer fired but not paired!");
+    }
+}
+
+/**
+ * Safety timer callback (Laser Unit)
+ * Monitors main unit heartbeat and turns off laser if no heartbeat received
+ */
+static void safety_timer_callback(void *arg)
+{
+    if (!is_paired) {
+        return;  // Not paired, no safety check needed
+    }
+    
+    // Get current time
+    int64_t now = esp_timer_get_time();
+    
+    // Check if we haven't received a heartbeat from main unit in too long
+    if (last_main_unit_heartbeat > 0) {
+        int64_t time_since_heartbeat = now - last_main_unit_heartbeat;
+        
+        if (time_since_heartbeat > HEARTBEAT_TIMEOUT_US) {
+            // No heartbeat for too long - check if laser is on
+            laser_status_t laser_status = laser_get_status();
+            
+            if (laser_status == LASER_ON) {
+                ESP_LOGW(TAG, "SAFETY: No heartbeat from main unit for %lld ms - turning off laser!",
+                         time_since_heartbeat / 1000);
+                
+                // Turn off laser for safety
+                laser_turn_off();
+                
+                // Turn off green LED, turn on red LED to indicate safety shutdown
+                gpio_set_level(CONFIG_SENSOR_LED_GREEN_PIN, 0);
+                gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 1);
+                
+                ESP_LOGE(TAG, "LASER SAFETY SHUTDOWN - No communication with main unit!");
+            }
+        }
     }
 }
 
@@ -812,6 +855,7 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
         case MSG_GAME_START:
             ESP_LOGI(TAG, "Game start command received");
             is_game_mode = true;  // Enter game mode
+            last_main_unit_heartbeat = esp_timer_get_time();  // Initialize safety timer
             laser_turn_on(100);  // Turn laser on at full intensity
             // Turn off status LED during game (status visible via green/red LEDs)
             gpio_set_level(CONFIG_LASER_STATUS_LED_PIN, 0);
@@ -820,7 +864,7 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             gpio_set_level(CONFIG_SENSOR_LED_RED_PIN, 0);
             // Start sensor monitoring
             sensor_start_monitoring();
-            ESP_LOGI(TAG, "Sensor monitoring started (Game Mode)");
+            ESP_LOGI(TAG, "Sensor monitoring started (Game Mode) - Safety timer active");
             break;
         case MSG_GAME_STOP:
             ESP_LOGI(TAG, "Game stop command received");
@@ -859,7 +903,13 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             break;
         case MSG_HEARTBEAT:
             // Ignore heartbeat messages (we send them, don't need to process them)
-            ESP_LOGD(TAG, "Heartbeat received (ignoring own broadcast)");
+            // But if it's from main unit, update safety timer
+            if (memcmp(sender_mac, main_unit_mac, 6) == 0) {
+                last_main_unit_heartbeat = esp_timer_get_time();
+                ESP_LOGD(TAG, "Heartbeat from main unit received - safety timer updated");
+            } else {
+                ESP_LOGD(TAG, "Heartbeat received (ignoring - not from main unit)");
+            }
             break;
         case MSG_PAIRING_RESPONSE:
             ESP_LOGI(TAG, "Pairing response received - paired successfully on channel %d!", current_scan_channel);
@@ -916,6 +966,8 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             ESP_LOGI(TAG, "Reset command received");
             // Reset game mode
             is_game_mode = false;
+            // Reset safety timer
+            last_main_unit_heartbeat = 0;
             // Stop sensor monitoring
             sensor_stop_monitoring();
             // Turn off laser and all LEDs
@@ -1034,6 +1086,15 @@ static void init_laser_unit(void)
         .name = "heartbeat_timer"
     };
     ESP_ERROR_CHECK(esp_timer_create(&heartbeat_timer_args, &heartbeat_timer));
+    
+    // Set up safety timer to monitor main unit heartbeat
+    ESP_LOGI(TAG, "  Setting up laser safety timer");
+    const esp_timer_create_args_t safety_timer_args = {
+        .callback = &safety_timer_callback,
+        .name = "safety_timer"
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&safety_timer_args, &safety_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(safety_timer, 2000000));  // Check every 2 seconds
     
     // Send initial pairing request
     ESP_LOGI(TAG, "  Sending initial pairing request to main unit");
