@@ -217,6 +217,13 @@ typedef struct {
 esp_err_t game_get_laser_units(laser_unit_info_t *units, size_t max_units, size_t *unit_count);
 
 /**
+ * Check if any laser units are online
+ * 
+ * @return true if at least one laser unit is online, false otherwise
+ */
+bool game_has_laser_units(void);
+
+/**
  * Control laser unit
  * 
  * @param module_id Module ID to control
@@ -240,8 +247,9 @@ esp_err_t game_reset_laser_unit(uint8_t module_id);
  * @param module_id Module ID
  * @param mac_addr MAC address of the unit
  * @param rssi Signal strength
+ * @param role Module role (1=laser, 2=finish button, 0=unknown)
  */
-void game_update_laser_unit(uint8_t module_id, const uint8_t *mac_addr, int8_t rssi);
+void game_update_laser_unit(uint8_t module_id, const uint8_t *mac_addr, int8_t rssi, uint8_t role);
 
 #ifdef __cplusplus
 }

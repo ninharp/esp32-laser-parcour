@@ -294,6 +294,19 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                         } else {
                             buzzer_play_pattern(BUZZER_PATTERN_ERROR);
                             ESP_LOGE(TAG, "Failed to start game: %s", esp_err_to_name(ret));
+                            
+                            // Show error message on display if no laser units
+                            if (ret == ESP_ERR_INVALID_STATE) {
+                                display_clear();
+                                display_text("ERROR:", 0);
+                                display_text("No laser units", 2);
+                                display_text("found!", 3);
+                                display_text("Check units", 5);
+                                display_update();
+                                vTaskDelay(pdMS_TO_TICKS(5000));  // Show for 5 seconds
+                                display_set_screen(SCREEN_IDLE);
+                                display_update();
+                            }
                         }
                     } else if (state == GAME_STATE_RUNNING || state == GAME_STATE_PENALTY) {
                         // Stop game
@@ -359,6 +372,9 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                             ESP_LOGE(TAG, "Failed to stop game: %s", esp_err_to_name(ret));
                         }
                     }
+                    // Always reset display to idle screen
+                    display_set_screen(SCREEN_IDLE);
+                    display_update();
                 }
                 break;
             case 3:  // Button 4 - Reserved for future use
@@ -412,8 +428,22 @@ static esp_err_t game_control_callback(const char *command, const char *data)
     esp_err_t ret = ESP_ERR_INVALID_ARG;
     
     if (strcmp(command, "start") == 0) {
-        buzzer_play_pattern(BUZZER_PATTERN_GAME_START);
         ret = game_start(GAME_MODE_SINGLE_SPEEDRUN, "Web Player");
+        if (ret == ESP_OK) {
+            buzzer_play_pattern(BUZZER_PATTERN_GAME_START);
+        } else if (ret == ESP_ERR_INVALID_STATE) {
+            // Show error on display if no laser units
+            display_clear();
+            display_text("ERROR:", 0);
+            display_text("No laser units", 2);
+            display_text("found!", 3);
+            display_text("Check web UI", 5);
+            display_update();
+            vTaskDelay(pdMS_TO_TICKS(5000));  // Show for 5 seconds
+            display_set_screen(SCREEN_IDLE);
+            display_update();
+            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+        }
     } else if (strcmp(command, "stop") == 0) {
         buzzer_play_pattern(BUZZER_PATTERN_GAME_END);
         ret = game_stop();
@@ -445,8 +475,8 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
              sender_mac[0], sender_mac[1], sender_mac[2], 
              sender_mac[3], sender_mac[4], sender_mac[5]);
     
-    // Update laser unit tracking
-    game_update_laser_unit(message->module_id, sender_mac, -50); // RSSI not available in callback
+    // Update laser unit tracking (role=0 means "keep existing role")
+    game_update_laser_unit(message->module_id, sender_mac, -50, 0);
     
     switch (message->msg_type) {
         case MSG_BEAM_BROKEN:
@@ -478,6 +508,9 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
             // data[0] will be 1 (laser) or 2 (finish button), default to 1 for backward compatibility
             uint8_t peer_role = (message->data[0] == 2) ? 2 : 1;
             const char *role_name = (peer_role == 2) ? "Finish Button" : "Laser Unit";
+            
+            // Update laser unit tracking with role information
+            game_update_laser_unit(message->module_id, sender_mac, -50, peer_role);
             
             // Add the unit as an ESP-NOW peer
             esp_err_t ret = espnow_add_peer(sender_mac, message->module_id, peer_role);
@@ -1469,7 +1502,19 @@ static void init_finish_button_unit(void)
  */
 void app_main(void)
 {
-    esp_log_level_set("SSD1306", ESP_LOG_DEBUG);  // Enable debug logs for SSD1306 driver
+    esp_log_level_set("*", ESP_LOG_NONE);  // Default log level
+    esp_log_level_set("gpio", ESP_LOG_DEBUG);
+    esp_log_level_set("WIFI_MGR", ESP_LOG_DEBUG);
+    esp_log_level_set("LASER_PARCOUR", ESP_LOG_DEBUG);
+    esp_log_level_set("DISPLAY_MGR", ESP_LOG_INFO);
+    esp_log_level_set("SSD1306", ESP_LOG_DEBUG);
+    esp_log_level_set("LASER_PARCOUR", ESP_LOG_DEBUG);
+    esp_log_level_set("BUTTON", ESP_LOG_DEBUG);
+    esp_log_level_set("sd_card_manager", ESP_LOG_DEBUG);
+    esp_log_level_set("WIFI_MGRWEB_SERVER", ESP_LOG_DEBUG);
+    esp_log_level_set("ESPNOW_MGR", ESP_LOG_DEBUG);
+    esp_log_level_set("GAME_LOGIC", ESP_LOG_DEBUG);
+
     // Print system information
     print_system_info();
     

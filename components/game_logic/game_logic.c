@@ -80,6 +80,13 @@ esp_err_t game_start(game_mode_t mode, const char *player_name)
         return ESP_FAIL;
     }
     
+    // Check if at least one laser unit is online
+    if (!game_has_laser_units()) {
+        ESP_LOGW(TAG, "Cannot start game: No laser units online");
+        xSemaphoreGive(game_mutex);
+        return ESP_ERR_INVALID_STATE;
+    }
+    
     // Initialize player data
     memset(&current_player, 0, sizeof(player_data_t));
     current_player.player_id = 1;
@@ -508,7 +515,7 @@ static size_t laser_unit_count = 0;
  * Update or add laser unit to tracking list
  * This should be called when receiving ESP-NOW messages from units
  */
-static void update_laser_unit(uint8_t module_id, const uint8_t *mac_addr, int8_t rssi)
+static void update_laser_unit(uint8_t module_id, const uint8_t *mac_addr, int8_t rssi, uint8_t role)
 {
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
     
@@ -520,6 +527,11 @@ static void update_laser_unit(uint8_t module_id, const uint8_t *mac_addr, int8_t
             laser_units[i].last_seen = now;
             laser_units[i].rssi = rssi;
             laser_units[i].is_online = true;
+            // Update role if provided (non-zero)
+            if (role != 0) {
+                laser_units[i].role = role;
+                ESP_LOGD(TAG, "Updated role for unit %d to %d", module_id, role);
+            }
             return;
         }
     }
@@ -532,10 +544,51 @@ static void update_laser_unit(uint8_t module_id, const uint8_t *mac_addr, int8_t
         laser_units[laser_unit_count].rssi = rssi;
         laser_units[laser_unit_count].is_online = true;
         laser_units[laser_unit_count].laser_on = false;
+        
+        // If role is 0 (unknown), assume it's a laser unit (role=1)
+        // This happens when heartbeat arrives before pairing request
+        if (role == 0) {
+            laser_units[laser_unit_count].role = 1;  // Default to laser unit
+            ESP_LOGW(TAG, "New unit %d added with default role=1 (laser)", module_id);
+        } else {
+            laser_units[laser_unit_count].role = role;
+        }
+        
         snprintf(laser_units[laser_unit_count].status, sizeof(laser_units[laser_unit_count].status), "Active");
         laser_unit_count++;
-        ESP_LOGI(TAG, "New laser unit registered: ID %d", module_id);
+        const char *role_name = (role == 2) ? "Finish Button" : (role == 1 || role == 0) ? "Laser Unit" : "Unknown";
+        ESP_LOGI(TAG, "New %s registered: ID %d (role=%d)", role_name, module_id, laser_units[laser_unit_count-1].role);
     }
+}
+
+/**
+ * Check if any laser units are online
+ */
+bool game_has_laser_units(void)
+{
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    
+    ESP_LOGI(TAG, "Checking for laser units: total units=%zu", laser_unit_count);
+    
+    // Check if at least one laser unit (role=1) is online
+    for (size_t i = 0; i < laser_unit_count; i++) {
+        uint32_t time_since_last_seen = now - laser_units[i].last_seen;
+        
+        ESP_LOGI(TAG, "Unit %d: role=%d, last_seen=%lums ago, online=%d", 
+                 laser_units[i].module_id, 
+                 laser_units[i].role,
+                 time_since_last_seen,
+                 laser_units[i].is_online);
+        
+        // Unit is online if seen within last 15 seconds AND is a laser unit (role=1)
+        if (time_since_last_seen <= 15000 && laser_units[i].role == 1) {
+            ESP_LOGI(TAG, "Found online laser unit %d", laser_units[i].module_id);
+            return true;
+        }
+    }
+    
+    ESP_LOGW(TAG, "No online laser units found!");
+    return false;
 }
 
 /**
@@ -643,8 +696,8 @@ esp_err_t game_reset_laser_unit(uint8_t module_id)
 /**
  * Public function to update laser unit tracking (call from ESP-NOW callback)
  */
-void game_update_laser_unit(uint8_t module_id, const uint8_t *mac_addr, int8_t rssi)
+void game_update_laser_unit(uint8_t module_id, const uint8_t *mac_addr, int8_t rssi, uint8_t role)
 {
-    update_laser_unit(module_id, mac_addr, rssi);
+    update_laser_unit(module_id, mac_addr, rssi, role);
 }
 

@@ -390,6 +390,11 @@ static esp_err_t game_control_handler(httpd_req_t *req)
         if (ret == ESP_OK) {
             httpd_resp_set_type(req, "application/json");
             httpd_resp_send(req, "{\"message\":\"OK\"}", HTTPD_RESP_USE_STRLEN);
+        } else if (ret == ESP_ERR_INVALID_STATE && strcmp(command, "start") == 0) {
+            // Special handling for start command with no laser units
+            httpd_resp_set_status(req, "400 Bad Request");
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_send(req, "{\"error\":\"No laser units found. Please check unit connections.\"}", HTTPD_RESP_USE_STRLEN);
         } else {
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Command failed");
         }
