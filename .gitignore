@@ -44,3 +44,6 @@ flash_download_tool*/
 
 # Backups
 *.backup
+
+# Temporary files
+temp/
