@@ -30,6 +30,20 @@ static const char *TAG = "MODULE_CTRL";
 // Display update task
 static TaskHandle_t display_update_task_handle = NULL;
 
+// Heartbeat timer for sending periodic heartbeats to laser units
+static esp_timer_handle_t heartbeat_timer = NULL;
+
+/**
+ * Heartbeat timer callback (Main Unit)
+ * Sends periodic heartbeat to all laser units to keep safety timers alive
+ */
+static void heartbeat_timer_callback(void *arg)
+{
+    // Send heartbeat broadcast to all units
+    espnow_broadcast_message(MSG_HEARTBEAT, NULL, 0);
+    ESP_LOGD(TAG, "Heartbeat broadcast sent to all units");
+}
+
 /**
  * Display update task - Updates the display based on game state
  */
@@ -570,6 +584,15 @@ void module_control_init(void)
     // Initialize ESP-NOW
     ESP_LOGI(TAG, "  Initializing ESP-NOW (Channel: %d)", CONFIG_ESPNOW_CHANNEL);
     ESP_ERROR_CHECK(espnow_manager_init(CONFIG_ESPNOW_CHANNEL, espnow_recv_callback_main));
+    
+    // Set up heartbeat timer (5 seconds - to keep laser unit safety timers alive)
+    ESP_LOGI(TAG, "  Setting up heartbeat timer");
+    const esp_timer_create_args_t heartbeat_timer_args = {
+        .callback = &heartbeat_timer_callback,
+        .name = "heartbeat_timer"
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&heartbeat_timer_args, &heartbeat_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(heartbeat_timer, 5000000));  // 5 seconds
     
     // Update all peers with current WiFi channel (in case we connected to external WiFi)
     uint8_t actual_channel;
