@@ -3,6 +3,17 @@
 
 cmake_minimum_required(VERSION 3.16)
 
+# Set ESP-ADF path (if ENABLE_SOUND_MANAGER is enabled)
+if(CONFIG_ENABLE_SOUND_MANAGER)
+    if(NOT DEFINED ENV{ADF_PATH})
+        message(WARNING "ADF_PATH environment variable not set. Sound Manager will use stub implementation.")
+    else()
+        set(ADF_PATH $ENV{ADF_PATH})
+        list(APPEND EXTRA_COMPONENT_DIRS "${ADF_PATH}/components")
+        message(STATUS "ESP-ADF enabled: ${ADF_PATH}")
+    endif()
+endif()
+
 # Include ESP-IDF CMake project setup
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 

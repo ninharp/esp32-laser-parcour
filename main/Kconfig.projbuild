@@ -398,4 +398,62 @@ menu "Laser Parcour Configuration"
 
     endmenu
 
+    menu "Sound Manager (I2S Audio)"
+        depends on MODULE_ROLE_CONTROL
+
+        config ENABLE_SOUND_MANAGER
+            bool "Enable Sound Manager (I2S Audio)"
+            default n
+            help
+                Enable I2S sound manager for playing WAV/MP3 files from SD card.
+                Requires ESP-ADF and SD card support.
+                
+                When enabled, sounds will be played via I2S audio module instead of buzzer.
+                Falls back to buzzer if sound file not found or I2S initialization fails.
+
+        config I2S_BCK_PIN
+            int "I2S BCK (Bit Clock) Pin"
+            range 0 21
+            default 4
+            depends on ENABLE_SOUND_MANAGER
+            help
+                GPIO pin for I2S bit clock (BCK/BCLK).
+                Connects to the I2S audio module's BCK pin.
+
+        config I2S_WS_PIN
+            int "I2S WS (Word Select) Pin"
+            range 0 21
+            default 5
+            depends on ENABLE_SOUND_MANAGER
+            help
+                GPIO pin for I2S word select (WS/LRCLK).
+                Connects to the I2S audio module's LRC/WS pin.
+
+        config I2S_DATA_OUT_PIN
+            int "I2S Data Out Pin"
+            range 0 21
+            default 6
+            depends on ENABLE_SOUND_MANAGER
+            help
+                GPIO pin for I2S data output (DOUT).
+                Connects to the I2S audio module's DIN pin.
+
+        config SOUND_FILES_PATH
+            string "Sound Files Directory"
+            default "/sdcard/sounds"
+            depends on ENABLE_SOUND_MANAGER
+            help
+                Path to directory containing sound files on SD card.
+                Sound files should be in WAV or MP3 format.
+
+        config DEFAULT_VOLUME
+            int "Default Volume (%)"
+            range 0 100
+            default 70
+            depends on ENABLE_SOUND_MANAGER
+            help
+                Default volume level (0-100%).
+
+    endmenu
+
 endmenu

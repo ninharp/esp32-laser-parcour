@@ -23,6 +23,18 @@
 #include "sd_card_manager.h"
 #endif
 
+// External sound API handlers from sound_api.c
+extern esp_err_t sound_mappings_handler(httpd_req_t *req);
+extern esp_err_t sound_mapping_set_handler(httpd_req_t *req);
+extern esp_err_t sound_files_handler(httpd_req_t *req);
+extern esp_err_t sound_upload_handler(httpd_req_t *req);
+extern esp_err_t sound_delete_handler(httpd_req_t *req);
+extern esp_err_t sound_play_handler(httpd_req_t *req);
+extern esp_err_t sound_stop_handler(httpd_req_t *req);
+extern esp_err_t sound_volume_get_handler(httpd_req_t *req);
+extern esp_err_t sound_volume_set_handler(httpd_req_t *req);
+extern esp_err_t sounds_page_handler(httpd_req_t *req);
+
 static const char *TAG = "WEB_SERVER";
 
 static httpd_handle_t server = NULL;
@@ -682,6 +694,77 @@ esp_err_t web_server_init(httpd_handle_t *server_out, game_control_callback_t ca
         .handler = units_control_handler
     };
     httpd_register_uri_handler(server, &units_control_uri);
+    
+    // Sound API endpoints
+    httpd_uri_t sounds_page_uri = {
+        .uri = "/sounds.html",
+        .method = HTTP_GET,
+        .handler = sounds_page_handler
+    };
+    httpd_register_uri_handler(server, &sounds_page_uri);
+    
+    httpd_uri_t sound_mappings_uri = {
+        .uri = "/api/sounds/mappings",
+        .method = HTTP_GET,
+        .handler = sound_mappings_handler
+    };
+    httpd_register_uri_handler(server, &sound_mappings_uri);
+    
+    httpd_uri_t sound_mapping_set_uri = {
+        .uri = "/api/sounds/mapping",
+        .method = HTTP_POST,
+        .handler = sound_mapping_set_handler
+    };
+    httpd_register_uri_handler(server, &sound_mapping_set_uri);
+    
+    httpd_uri_t sound_files_uri = {
+        .uri = "/api/sounds/files",
+        .method = HTTP_GET,
+        .handler = sound_files_handler
+    };
+    httpd_register_uri_handler(server, &sound_files_uri);
+    
+    httpd_uri_t sound_upload_uri = {
+        .uri = "/api/sounds/upload",
+        .method = HTTP_POST,
+        .handler = sound_upload_handler
+    };
+    httpd_register_uri_handler(server, &sound_upload_uri);
+    
+    httpd_uri_t sound_delete_uri = {
+        .uri = "/api/sounds/delete",
+        .method = HTTP_POST,
+        .handler = sound_delete_handler
+    };
+    httpd_register_uri_handler(server, &sound_delete_uri);
+    
+    httpd_uri_t sound_play_uri = {
+        .uri = "/api/sounds/play",
+        .method = HTTP_POST,
+        .handler = sound_play_handler
+    };
+    httpd_register_uri_handler(server, &sound_play_uri);
+    
+    httpd_uri_t sound_stop_uri = {
+        .uri = "/api/sounds/stop",
+        .method = HTTP_POST,
+        .handler = sound_stop_handler
+    };
+    httpd_register_uri_handler(server, &sound_stop_uri);
+    
+    httpd_uri_t sound_volume_get_uri = {
+        .uri = "/api/sounds/volume",
+        .method = HTTP_GET,
+        .handler = sound_volume_get_handler
+    };
+    httpd_register_uri_handler(server, &sound_volume_get_uri);
+    
+    httpd_uri_t sound_volume_set_uri = {
+        .uri = "/api/sounds/volume",
+        .method = HTTP_POST,
+        .handler = sound_volume_set_handler
+    };
+    httpd_register_uri_handler(server, &sound_volume_set_uri);
     
 #ifdef CONFIG_ENABLE_SD_CARD
     // Wildcard handler für SD-Karten-Dateien registrieren (NACH allen API-Handlers!)
