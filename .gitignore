@@ -40,3 +40,6 @@ managed_components/
 
 # Flash download tool
 flash_download_tool*/
+
+# Backups
+*.backup
