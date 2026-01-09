@@ -24,7 +24,7 @@ void init_logging(void)
     esp_log_level_set("GAME_LOGIC", ESP_LOG_DEBUG);       // Game state & scoring
     esp_log_level_set("DISPLAY_MGR", ESP_LOG_INFO);      // Display manager
     esp_log_level_set("SSD1306", ESP_LOG_DEBUG);          // SSD1306 OLED driver
-    esp_log_level_set("ESPNOW_MGR", ESP_LOG_INFO);       // ESP-NOW communication
+    esp_log_level_set("ESPNOW_MGR", ESP_LOG_DEBUG);       // ESP-NOW communication
     esp_log_level_set("BUTTON", ESP_LOG_DEBUG);           // Button handler
     esp_log_level_set("BUZZER", ESP_LOG_DEBUG);           // Buzzer/audio
     esp_log_level_set("LASER_CTRL", ESP_LOG_DEBUG);       // Laser control
