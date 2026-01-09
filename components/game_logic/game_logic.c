@@ -25,9 +25,9 @@ static player_data_t current_player = {0};
 static game_stats_t statistics = {0};
 static game_config_t configuration = {
     .mode = GAME_MODE_SINGLE_SPEEDRUN,
-    .max_time = 0,              // No time limit (0 = unlimited)
-    .penalty_time = 15,         // 15 seconds penalty per beam break
-    .countdown_time = 5,        // 5 second countdown
+    .max_time = CONFIG_GAME_DURATION,       // From Kconfig (0 = unlimited)
+    .penalty_time = CONFIG_PENALTY_TIME,    // From Kconfig
+    .countdown_time = CONFIG_COUNTDOWN_DURATION,  // From Kconfig
     .max_players = 8
 };
 
