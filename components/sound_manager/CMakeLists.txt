@@ -1,7 +1,6 @@
 idf_component_register(
     SRCS 
         "sound_manager.c"
-        "audio_output.c"
     INCLUDE_DIRS "include"
     REQUIRES 
         esp_adc

@@ -33,7 +33,7 @@
 
 // #include "esp_peripherals.h"
 // #include "periph_wifi.h"
-#include "board.h"
+// #include "board.h"  // Not needed, causes compile errors
 
 static const char *TAG = "SOUND_MGR";
 
@@ -180,16 +180,19 @@ static esp_err_t init_pipeline(void)
     ESP_LOGI(TAG, "[1.2] Create http stream to read data");
     http_stream_cfg_t http_cfg = HTTP_STREAM_CFG_DEFAULT();
     http_stream_reader = http_stream_init(&http_cfg);
+    mem_assert(http_stream_reader);
     
     // Create MP3 decoder
     ESP_LOGI(TAG, "[1.3] Create mp3 decoder to decode mp3 file");
     mp3_decoder_cfg_t mp3_cfg = DEFAULT_MP3_DECODER_CONFIG();
     mp3_decoder = mp3_decoder_init(&mp3_cfg);
+    mem_assert(mp3_decoder);
     
     // Create WAV decoder
     ESP_LOGI(TAG, "[1.4] Create wav decoder to decode wav file");
     wav_decoder_cfg_t wav_cfg = DEFAULT_WAV_DECODER_CONFIG();
     wav_decoder = wav_decoder_init(&wav_cfg);
+    mem_assert(wav_decoder);
     
     // Create resample filter for sample rate conversion
     // This converts any input sample rate to 44100 Hz for I2S output
@@ -205,6 +208,7 @@ static esp_err_t init_pipeline(void)
     rsp_cfg.out_len_bytes = 1024;
     rsp_cfg.mode = 0;          // Normal mode, not RESAMPLE_DECODE_MODE
     resample_filter = rsp_filter_init(&rsp_cfg);
+    mem_assert(resample_filter);
     
     ESP_LOGI(TAG, "[1.5] Resample filter configured: %d Hz -> %d Hz, %d ch -> %d ch",
              rsp_cfg.src_rate, rsp_cfg.dest_rate, rsp_cfg.src_ch, rsp_cfg.dest_ch);
@@ -216,17 +220,34 @@ static esp_err_t init_pipeline(void)
     int set_gain[] = { -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13};
     eq_cfg.set_gain = set_gain;
     equalizer = equalizer_init(&eq_cfg);
+    mem_assert(equalizer);
     
     ESP_LOGI(TAG, "[1.6] Equalizer initialized with -13dB gain");
     
-    // Register all elements to the pipeline
+    // TEMPORARY FIX: Create I2S stream inline (instead of init_i2s_stream()) to fix NULL pointer crash
+    // TODO: Re-enable init_i2s_stream() and equalizer/resample once basic audio works
+    ESP_LOGI(TAG, "[1.7] Create i2s stream to write data to codec chip");
+    i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
+    i2s_cfg.type = AUDIO_STREAM_WRITER;
+    i2s_cfg.std_cfg.gpio_cfg.bclk = current_config.bck_io_num;   // GPIO4
+    i2s_cfg.std_cfg.gpio_cfg.ws = current_config.ws_io_num;       // GPIO0  
+    i2s_cfg.std_cfg.gpio_cfg.dout = current_config.data_out_num;  // GPIO1
+    i2s_cfg.std_cfg.gpio_cfg.din = I2S_GPIO_UNUSED;
+    i2s_cfg.std_cfg.gpio_cfg.mclk = I2S_GPIO_UNUSED;
+    i2s_stream_writer = i2s_stream_init(&i2s_cfg);
+    mem_assert(i2s_stream_writer);
+    ESP_LOGI(TAG, "[1.7] I2S stream initialized: BCLK=%d, WS=%d, DOUT=%d", 
+             current_config.bck_io_num, current_config.ws_io_num, current_config.data_out_num);
+    
+    // Register ONLY basic elements (http→mp3→i2s) for testing
+    // equalizer and resample_filter are created above but NOT registered (testing phase)
     ESP_LOGI(TAG, "[2.0] Register all elements to audio pipeline");
     audio_pipeline_register(pipeline, http_stream_reader, "http");
     audio_pipeline_register(pipeline, mp3_decoder,        "mp3");
     audio_pipeline_register(pipeline, i2s_stream_writer,  "i2s");
 
-    // Link it together: http_stream --> mp3_decoder --> equalizer --> i2s_stream --> [codec_chip]
-    ESP_LOGI(TAG, "[2.1] Link it together http_stream-->mp3_decoder-->equalizer-->i2s_stream-->[codec_chip]");
+    // Link it together: http_stream --> mp3_decoder --> i2s_stream (simple test pipeline)
+    ESP_LOGI(TAG, "[2.1] Link elements: http-->mp3-->i2s (testing without equalizer/resample)");
     const char *link_tag[3] = {"http", "mp3", "i2s"};
     audio_pipeline_link(pipeline, &link_tag[0], 3);
 
@@ -235,9 +256,7 @@ static esp_err_t init_pipeline(void)
     // audio_element_set_uri(http_stream_reader, "https://dl.espressif.com/dl/audio/ff-16b-2c-44100hz.mp3");
     audio_element_set_uri(http_stream_reader, "https://wdr-1live-live.icecast.wdr.de/wdr/1live/live/mp3/128/stream.mp3");
 
-
-
-    // Create I2S stream
+    // Create I2S stream - DISABLED FOR TESTING (using inline creation above instead)
     // if (init_i2s_stream() != ESP_OK) {
     //     return ESP_FAIL;
     // }
@@ -255,13 +274,14 @@ static esp_err_t init_pipeline(void)
     ESP_LOGI(TAG, "[3.1] Listening event from all elements of pipeline");
     audio_pipeline_set_listener(pipeline, evt);
 
-    ESP_LOGI(TAG, "[ 4 ] Start audio_pipeline");
-    audio_pipeline_run(pipeline);
+    // DON'T start pipeline yet - wait for WiFi connection!
+    // Call sound_manager_start_streaming() after WiFi is connected
+    ESP_LOGI(TAG, "[ 4 ] Audio pipeline created (NOT started - waiting for WiFi)");
     
     // Start event task
     xTaskCreate(audio_event_task, "audio_event", 3072, NULL, 5, NULL);
     
-    ESP_LOGI(TAG, "Audio pipeline initialized");
+    ESP_LOGI(TAG, "Audio pipeline initialized (call start_streaming after WiFi connect)");
     return ESP_OK;
 }
 
@@ -503,6 +523,24 @@ bool sound_manager_is_ready(void)
     return is_initialized;
 }
 
+esp_err_t sound_manager_start_streaming(void)
+{
+    if (!is_initialized || !pipeline) {
+        ESP_LOGE(TAG, "Sound manager not initialized");
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "Starting HTTP streaming pipeline (WiFi connected)");
+    esp_err_t ret = audio_pipeline_run(pipeline);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start pipeline: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    ESP_LOGI(TAG, "HTTP streaming started");
+    return ESP_OK;
+}
+
 esp_err_t sound_manager_set_event_file(sound_event_t event, const char *filename)
 {
     if (event >= SOUND_EVENT_MAX) {
@@ -612,6 +650,7 @@ esp_err_t sound_manager_stop(void) { return ESP_ERR_NOT_SUPPORTED; }
 esp_err_t sound_manager_set_volume(uint8_t volume) { return ESP_ERR_NOT_SUPPORTED; }
 int sound_manager_get_volume(void) { return -1; }
 bool sound_manager_is_ready(void) { return false; }
+esp_err_t sound_manager_start_streaming(void) { return ESP_ERR_NOT_SUPPORTED; }
 esp_err_t sound_manager_set_event_file(sound_event_t event, const char *filename) { return ESP_ERR_NOT_SUPPORTED; }
 const char* sound_manager_get_event_file(sound_event_t event) { return NULL; }
 esp_err_t sound_manager_save_config(void) { return ESP_ERR_NOT_SUPPORTED; }

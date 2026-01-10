@@ -102,6 +102,11 @@ esp32-laser-parcour/
 - ✅ ESP-NOW API breaking changes behoben:
   - `espnow_send_cb` Callback-Signatur geändert von `(const uint8_t *mac_addr, ...)` zu `(const wifi_tx_info_t *tx_info, ...)`
   - `components/espnow_manager/espnow_manager.c` aktualisiert
+- ✅ WiFi API breaking changes behoben:
+  - `esp_wifi_set_config()` kann nicht mehr im laufenden WiFi-State aufgerufen werden
+  - Lösung: WiFi stoppen vor Rekonfiguration, dann neu starten
+  - `components/wifi_ap_manager/wifi_ap_manager.c:463` - `wifi_connect_sta()` gefixt
+  - Fehler war: `ESP_ERR_WIFI_STATE (0x3006)` beim Versuch config während WiFi started zu ändern
 - ✅ ESP-ADF Integration vereinfacht:
   - Lokale `audio_stream` Komponente entfernt
   - Verwendet jetzt native ESP-ADF Komponenten direkt
@@ -116,8 +121,39 @@ esp32-laser-parcour/
 - Hardware: MAX98357A Class-D Amplifier, SD_MODE hardwired active
 - Symptom: Kontinuierliches Krächzen auch ohne Wiedergabe
 - Debugging-Ansatz: HTTP-Stream-Wiedergabe aus bekanntem funktionierendem Beispiel
-- Pipeline: HTTP Stream → MP3 Decoder → Resample (44.1kHz) → Equalizer (-13dB) → I2S
-- Status: In Diagnose
+- Status: In Diagnose - Grundlegende Wiedergabe ERST testen bevor weitere Features
+
+**AKTUELLER TEST-ZUSTAND (10. Januar 2026):**
+- ⚠️ **SIMPLE TEST PIPELINE:** `http → mp3 → i2s` (NUR diese 3 Elemente)
+- ❌ Equalizer/Resample sind ERSTELLT aber NICHT in Pipeline registriert (testweise deaktiviert)
+- ❌ `init_i2s_stream()` Funktion ist AUSKOMMENTIERT (testweise)
+- ✅ **FIX 1:** I2S Stream wird INLINE erstellt (behebt NULL-Pointer-Crash)
+  - Problem war: `i2s_stream_writer` war NULL weil `init_i2s_stream()` auskommentiert war
+  - Lösung: I2S Stream direkt in `init_pipeline()` erstellen vor Pipeline-Registrierung
+  - Zeile ~220 in `sound_manager.c`: Inline I2S-Stream-Initialisierung
+- ✅ **FIX 2:** Pipeline startet NACH WiFi-Verbindung (behebt HTTP-Stream ohne Netzwerk)
+  - Problem: HTTP-Stream startete vor WiFi-Verbindung
+  - Lösung: `sound_manager_start_streaming()` wird von `module_control.c` nach WiFi-Init aufgerufen
+  - Pipeline wird bei Init erstellt aber NICHT gestartet
+  - Start erfolgt explizit nach erfolgreicher WiFi-Verbindung
+- 🔄 **NÄCHSTER SCHRITT:** Erst wenn grundlegende Audio-Wiedergabe funktioniert:
+  - Equalizer/Resample zur Pipeline hinzufügen
+  - `init_i2s_stream()` Funktion reaktivieren
+  - Vollständige Pipeline: `http → mp3 → resample → equalizer → i2s`
+
+**Wichtige Code-Stellen:**
+- `components/sound_manager/sound_manager.c:~220`: Inline I2S-Erstellung (TEMP FIX)
+- `components/sound_manager/sound_manager.c:~130`: `init_i2s_stream()` Funktion (auskommentiert)
+- `components/sound_manager/sound_manager.c:~228`: Pipeline Register (nur 3 Elemente)
+- `components/sound_manager/sound_manager.c:~234`: Link Chain (nur 3 Tags)
+- `main/module_control.c:~660-678`: WiFi-Connect mit `sound_manager_start_streaming()` Aufruf
+
+**API-Migration:**
+- Alte API: `audio_play_event(AUDIO_EVENT_*, false)` → Entfernt
+- Neue API: `sound_manager_play_event(SOUND_EVENT_*, SOUND_MODE_ONCE)`
+- Alle Aufrufe in `module_control.c` migriert (18 Stellen)
+- `audio_output.c` entfernt (obsolet, Funktionalität in sound_manager.c)
+- CMakeLists.txt bereinigt (audio_output.c Referenz entfernt)
 
 ### Modularisierung in separate Module
 

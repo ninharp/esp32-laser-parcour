@@ -118,6 +118,14 @@ int sound_manager_get_volume(void);
 bool sound_manager_is_ready(void);
 
 /**
+ * Start streaming pipeline (HTTP/webradio)
+ * Call this AFTER WiFi is connected!
+ * 
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t sound_manager_start_streaming(void);
+
+/**
  * Set sound file mapping for event
  * 
  * @param event Sound event
