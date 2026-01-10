@@ -11,7 +11,7 @@ This project implements a distributed laser obstacle course system where players
 - **Finish Button**: Optional finish line button for successful game completion
 - **All modules communicate wirelessly via ESP-NOW** for low-latency, reliable communication
 
-Built with **ESP-IDF 5.4.2** for maximum performance and reliability.
+Built with **ESP-IDF 5.5.2** and **ESP-ADF 2.7** for maximum performance and reliability.
 
 ## ✨ Features
 
@@ -40,8 +40,8 @@ Built with **ESP-IDF 5.4.2** for maximum performance and reliability.
   - **Button 1**: Start/Stop/Resume (long press: toggle all lasers)
   - **Button 2**: Stop/Reset active game, returns to idle screen
   - **Button 3**: Debug Finish (configurable via menuconfig)
-- 🎵 **Audio feedback (optional)** - Buzzer with multiple sound patterns
-- 💾 **SD Card support (optional)** - Custom web interface files from SD card
+- 🎵 **Audio feedback (optional)** - I2S audio via MAX98357A amplifier or simple buzzer
+- 💾 **SD Card support (optional)** - Custom web interface files and sound files from SD card
 
 > ℹ️ **Note**: Display, buttons, buzzer, and SD card are all **optional**. The system works perfectly with just the web interface for full remote control.
 

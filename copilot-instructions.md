@@ -5,12 +5,14 @@
 Ein modulares, ESP32-C3 basiertes Laser-Hindernisparcours-Spielsystem mit drahtloser Steuerung, Echtzeit-Überwachung und interaktivem Gaming-Erlebnis.
 
 **Technologie-Stack:**
-- ESP-IDF 5.4.2
+- ESP-IDF 5.5.2
+- ESP-ADF 2.7 (Audio Development Framework)
 - FreeRTOS
 - ESP-NOW (Wireless Communication)
 - I2C (OLED Display)
 - ADC (Sensor Detection)
 - LEDC PWM (Laser Control)
+- I2S (MAX98357A Audio Amplifier)
 - SD Card (Web Interface & High Scores)
 
 ---
@@ -93,6 +95,29 @@ esp32-laser-parcour/
 ---
 
 ## 🔄 Aktuelle Architektur-Änderungen (Januar 2026)
+
+### ESP-IDF 5.5.2 Migration (10. Januar 2026)
+
+**Upgrade von 5.4.2 → 5.5.2**
+- ✅ ESP-NOW API breaking changes behoben:
+  - `espnow_send_cb` Callback-Signatur geändert von `(const uint8_t *mac_addr, ...)` zu `(const wifi_tx_info_t *tx_info, ...)`
+  - `components/espnow_manager/espnow_manager.c` aktualisiert
+- ✅ ESP-ADF Integration vereinfacht:
+  - Lokale `audio_stream` Komponente entfernt
+  - Verwendet jetzt native ESP-ADF Komponenten direkt
+  - `include($ENV{ADF_PATH}/CMakeLists.txt)` in Haupt-CMakeLists.txt
+- ✅ Konfiguration:
+  - `CONFIG_ESP32C3_DEFAULT_CPU_FREQ_160` → `CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_160`
+  - Alle deprecated Warnings bereinigt
+
+### Audio System Debugging (Januar 2026)
+
+**Problem:** Audio Crackling/Buzzing auf MAX98357A I2S Amplifier
+- Hardware: MAX98357A Class-D Amplifier, SD_MODE hardwired active
+- Symptom: Kontinuierliches Krächzen auch ohne Wiedergabe
+- Debugging-Ansatz: HTTP-Stream-Wiedergabe aus bekanntem funktionierendem Beispiel
+- Pipeline: HTTP Stream → MP3 Decoder → Resample (44.1kHz) → Equalizer (-13dB) → I2S
+- Status: In Diagnose
 
 ### Modularisierung in separate Module
 
