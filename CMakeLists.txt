@@ -1,5 +1,5 @@
 # ESP32 Laser Obstacle Course - Main CMakeLists.txt
-# This is a multi-module system that can be configured as Main Unit or Laser Unit
+# This is a multi-module system that can be configured as Main Unit, Laser Unit or Finish Unit
 
 cmake_minimum_required(VERSION 3.16)
 
