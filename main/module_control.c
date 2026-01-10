@@ -629,7 +629,7 @@ void module_control_init(void)
         esp_err_t sound_ret = sound_manager_init(NULL);  // NULL = use menuconfig settings
         if (sound_ret == ESP_OK) {
             ESP_LOGI(TAG, "  Sound Manager initialized - audio playback enabled");
-            audio_play_event(AUDIO_EVENT_STARTUP, false);
+            //audio_play_event(AUDIO_EVENT_STARTUP, false);
         } else {
             ESP_LOGW(TAG, "  Sound Manager initialization failed, using buzzer fallback");
         }

@@ -31,8 +31,9 @@ static QueueHandle_t espnow_queue __attribute__((unused)) = NULL;
 
 /**
  * ESP-NOW send callback
+ * Note: IDF 5.5+ uses wifi_tx_info_t instead of mac_addr
  */
-static void espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status)
+static void espnow_send_cb(const wifi_tx_info_t *tx_info, esp_now_send_status_t status)
 {
     if (status == ESP_NOW_SEND_SUCCESS) {
         ESP_LOGD(TAG, "Message sent successfully");
