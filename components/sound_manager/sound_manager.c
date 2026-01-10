@@ -12,6 +12,8 @@
 #include "esp_err.h"
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -26,6 +28,7 @@
 #include "wav_decoder.h"
 #include "fatfs_stream.h"
 #include "filter_resample.h"
+#include "equalizer.h"
 
 static const char *TAG = "SOUND_MGR";
 
@@ -50,6 +53,7 @@ static audio_element_handle_t mp3_decoder = NULL;
 static audio_element_handle_t wav_decoder = NULL;
 static audio_element_handle_t fatfs_reader = NULL;
 static audio_element_handle_t resample_filter = NULL;
+static audio_element_handle_t equalizer = NULL;
 static audio_event_iface_handle_t evt = NULL;
 
 // Configuration
@@ -95,6 +99,11 @@ static void audio_event_task(void *pvParameters)
                                 audio_pipeline_terminate(pipeline);
                             }
                         }
+                    } else if (msg.cmd == AEL_MSG_CMD_REPORT_MUSIC_INFO) {
+                        audio_element_info_t music_info = {0};
+                        audio_element_getinfo((audio_element_handle_t)msg.source, &music_info);
+                        ESP_LOGI(TAG, "Decoder output: %d Hz, %d bits, %d channels",
+                                 music_info.sample_rates, music_info.bits, music_info.channels);
                     }
                 }
             }
@@ -104,53 +113,30 @@ static void audio_event_task(void *pvParameters)
 }
 
 /**
- * Initialize I2S stream
+ * Initialize I2S stream - use ESP-ADF defaults like webradio example
  */
 static esp_err_t init_i2s_stream(void)
 {
+    // Use ESP-ADF default configuration - exactly like webradio!
     i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
     i2s_cfg.type = AUDIO_STREAM_WRITER;
     
-    // Configure channel for I2S NUM 0
-    i2s_cfg.chan_cfg.id = I2S_NUM_0;
-    i2s_cfg.chan_cfg.role = I2S_ROLE_MASTER;
-    i2s_cfg.chan_cfg.dma_desc_num = 8;
-    i2s_cfg.chan_cfg.dma_frame_num = 300;
-    i2s_cfg.chan_cfg.auto_clear = true;
-    
-    // Configure standard mode with clock settings
-    // Let ESP-ADF auto-configure sample rate based on audio file
-    // Common rates: 24000, 32000, 44100, 48000 Hz
-    i2s_cfg.std_cfg.clk_cfg.sample_rate_hz = 44100;  // Default, will be adjusted by decoder
-    i2s_cfg.std_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
-    
-    // Configure slot (data format) settings - Philips I2S format
-    i2s_cfg.std_cfg.slot_cfg.data_bit_width = I2S_DATA_BIT_WIDTH_16BIT;
-    i2s_cfg.std_cfg.slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_AUTO;
-    i2s_cfg.std_cfg.slot_cfg.slot_mode = I2S_SLOT_MODE_STEREO;
-    i2s_cfg.std_cfg.slot_cfg.slot_mask = I2S_STD_SLOT_BOTH;
-    i2s_cfg.std_cfg.slot_cfg.ws_width = I2S_DATA_BIT_WIDTH_16BIT;
-    i2s_cfg.std_cfg.slot_cfg.ws_pol = false;
-    i2s_cfg.std_cfg.slot_cfg.bit_shift = true;
-    i2s_cfg.std_cfg.slot_cfg.left_align = true;
-    i2s_cfg.std_cfg.slot_cfg.big_endian = false;
-    i2s_cfg.std_cfg.slot_cfg.bit_order_lsb = false;
-    
-    // Configure GPIO pins
-    i2s_cfg.std_cfg.gpio_cfg.bclk = current_config.bck_io_num;
-    i2s_cfg.std_cfg.gpio_cfg.ws = current_config.ws_io_num;
-    i2s_cfg.std_cfg.gpio_cfg.dout = current_config.data_out_num;
+    // Override GPIO pins for MAX98357A
+    i2s_cfg.std_cfg.gpio_cfg.bclk = current_config.bck_io_num;   // GPIO4
+    i2s_cfg.std_cfg.gpio_cfg.ws = current_config.ws_io_num;       // GPIO0  
+    i2s_cfg.std_cfg.gpio_cfg.dout = current_config.data_out_num;  // GPIO1
     i2s_cfg.std_cfg.gpio_cfg.din = I2S_GPIO_UNUSED;
     i2s_cfg.std_cfg.gpio_cfg.mclk = I2S_GPIO_UNUSED;
-    i2s_cfg.std_cfg.gpio_cfg.invert_flags.mclk_inv = false;
-    i2s_cfg.std_cfg.gpio_cfg.invert_flags.bclk_inv = false;
-    i2s_cfg.std_cfg.gpio_cfg.invert_flags.ws_inv = false;
     
     i2s_stream_writer = i2s_stream_init(&i2s_cfg);
     if (i2s_stream_writer == NULL) {
         ESP_LOGE(TAG, "Failed to create I2S stream");
         return ESP_FAIL;
     }
+    
+    ESP_LOGI(TAG, "I2S stream initialized (Philips I2S format)");
+    ESP_LOGI(TAG, "  GPIO: BCLK=%d, WS=%d, DOUT=%d", 
+             current_config.bck_io_num, current_config.ws_io_num, current_config.data_out_num);
     
     return ESP_OK;
 }
@@ -186,10 +172,26 @@ static esp_err_t init_pipeline(void)
     rsp_filter_cfg_t rsp_cfg = DEFAULT_RESAMPLE_FILTER_CONFIG();
     rsp_cfg.src_rate = 44100;  // Will be auto-adjusted by decoder
     rsp_cfg.src_ch = 2;        // Stereo input
-    rsp_cfg.dest_rate = 44100; // Output to I2S
+    rsp_cfg.dest_rate = 44100; // Output to I2S at fixed 44.1kHz
     rsp_cfg.dest_ch = 2;       // Stereo output
-    rsp_cfg.mode = RESAMPLE_DECODE_MODE;
+    rsp_cfg.complexity = 0;    // Lowest complexity for better performance
+    rsp_cfg.down_ch_idx = 0;
+    rsp_cfg.prefer_flag = ESP_RSP_PREFER_TYPE_SPEED;
+    rsp_cfg.out_len_bytes = 1024;
+    rsp_cfg.mode = 0;          // Normal mode, not RESAMPLE_DECODE_MODE
     resample_filter = rsp_filter_init(&rsp_cfg);
+    
+    ESP_LOGI(TAG, "Resample filter configured: %d Hz -> %d Hz, %d ch -> %d ch",
+             rsp_cfg.src_rate, rsp_cfg.dest_rate, rsp_cfg.src_ch, rsp_cfg.dest_ch);
+    
+    // Create equalizer for volume control - CRITICAL!
+    // Webradio uses -13dB gain to prevent clipping/distortion
+    equalizer_cfg_t eq_cfg = DEFAULT_EQUALIZER_CONFIG();
+    int set_gain[] = { -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13, -13};
+    eq_cfg.set_gain = set_gain;
+    equalizer = equalizer_init(&eq_cfg);
+    
+    ESP_LOGI(TAG, "Equalizer initialized with -13dB gain");
     
     // Create I2S stream
     if (init_i2s_stream() != ESP_OK) {
@@ -270,6 +272,7 @@ esp_err_t sound_manager_deinit(void)
         audio_pipeline_unregister(pipeline, mp3_decoder);
         audio_pipeline_unregister(pipeline, wav_decoder);
         audio_pipeline_unregister(pipeline, resample_filter);
+        audio_pipeline_unregister(pipeline, equalizer);
         audio_pipeline_unregister(pipeline, i2s_stream_writer);
         audio_pipeline_deinit(pipeline);
     }
@@ -279,6 +282,8 @@ esp_err_t sound_manager_deinit(void)
     if (mp3_decoder) audio_element_deinit(mp3_decoder);
     if (wav_decoder) audio_element_deinit(wav_decoder);
     if (resample_filter) audio_element_deinit(resample_filter);
+    if (equalizer) audio_element_deinit(equalizer);
+    if (equalizer) audio_element_deinit(equalizer);
     if (i2s_stream_writer) audio_element_deinit(i2s_stream_writer);
     if (evt) audio_event_iface_destroy(evt);
     
@@ -339,22 +344,27 @@ esp_err_t sound_manager_play_file(const char *filename, sound_mode_t mode)
     audio_pipeline_unregister(pipeline, mp3_decoder);
     audio_pipeline_unregister(pipeline, wav_decoder);
     audio_pipeline_unregister(pipeline, resample_filter);
+    audio_pipeline_unregister(pipeline, equalizer);
     
-    // Register elements: file -> decoder -> resample -> i2s
+    // Register elements: file -> decoder -> resample -> equalizer -> i2s
+    // This matches the webradio pipeline exactly!
     audio_pipeline_register(pipeline, fatfs_reader, "file");
     audio_pipeline_register(pipeline, decoder, "dec");
-    audio_pipeline_register(pipeline, resample_filter, "filter");
+    audio_pipeline_register(pipeline, resample_filter, "resample");
+    audio_pipeline_register(pipeline, equalizer, "eq");
     audio_pipeline_register(pipeline, i2s_stream_writer, "i2s");
     
-    // Link elements in chain
-    const char *link_tag[4] = {"file", "dec", "filter", "i2s"};
-    audio_pipeline_link(pipeline, &link_tag[0], 4);
+    // Link elements in chain: file -> decoder -> resample -> equalizer -> i2s
+    const char *link_tag[5] = {"file", "dec", "resample", "eq", "i2s"};
+    audio_pipeline_link(pipeline, &link_tag[0], 5);
     
     // Set URI
     audio_element_set_uri(fatfs_reader, filepath);
     
     // Set playback mode
     current_mode = mode;
+    
+    ESP_LOGI(TAG, "Audio pipeline: file -> decoder -> resample -> equalizer -> I2S");
     
     // Start pipeline
     audio_pipeline_run(pipeline);
