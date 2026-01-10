@@ -1024,6 +1024,11 @@ if (penalty_elapsed >= PENALTY_DISPLAY_TIME_MS) {  // 3000ms = 3 Sekunden
 - Main Unit aktualisiert `last_seen` Timestamp bei jedem Heartbeat
 - Laser Units ignorieren eigene Heartbeat-Broadcasts (MSG_HEARTBEAT Handler)
 - Units bleiben online solange Heartbeats empfangen werden
+- **Main Unit sendet auch Heartbeats** (5 Sekunden Intervall) zur Laser Unit Safety Timer Synchronisation
+- **Optimierung (10. Januar 2026):** Main Unit sendet KEINE Heartbeats wenn keine Laser Units verbunden
+  - Prüfung via `game_has_laser_units()` in `heartbeat_timer_callback()`
+  - Vermeidet unnötige ESP-NOW Broadcasts wenn System idle ist
+  - Reduziert Netzwerk-Traffic und Stromverbrauch
 
 ### Web Interface Status Updates
 

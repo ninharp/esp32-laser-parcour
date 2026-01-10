@@ -1,17 +1,2 @@
 
-wenn keine units verbunden sind soll die main unit auch kiene heartbeat messages senden
-also in module_control.c in der heartbeat task eine abfrage einbauen ob units verbunden sind
-wenn keine verbunden sind, dann kein heartbeat senden
-I (160172) MODULE_CTRL: Status: Running - Free heap: 85684 bytes | No units connected
-D (164049) ESPNOW_MGR: Sent message type 0x06
-D (164049) MODULE_CTRL: Heartbeat broadcast sent to all units
-D (164058) ESPNOW_MGR: Message sent successfully
-I (165172) MODULE_CTRL: Status: Running - Free heap: 85684 bytes | No units connected
-D (169049) ESPNOW_MGR: Sent message type 0x06
-D (169049) MODULE_CTRL: Heartbeat broadcast sent to all units
-D (169050) ESPNOW_MGR: Message sent successfully
-I (170172) MODULE_CTRL: Status: Running - Free heap: 85684 bytes | No units connected
-D (174049) ESPNOW_MGR: Sent message type 0x06
-D (174049) MODULE_CTRL: Heartbeat broadcast sent to all units
-D (174050) ESPNOW_MGR: Message sent successfully
 

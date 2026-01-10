@@ -115,8 +115,12 @@ static void list_sd_card_structure(void)
  * Sends periodic heartbeat to all laser units to keep safety timers alive
  */
 static void heartbeat_timer_callback(void *arg)
-{
-    // Send heartbeat broadcast to all units
+{    // Only send heartbeat if laser units are connected
+    if (!game_has_laser_units()) {
+        ESP_LOGD(TAG, "Skipping heartbeat - no laser units connected");
+        return;
+    }
+        // Send heartbeat broadcast to all units
     espnow_broadcast_message(MSG_HEARTBEAT, NULL, 0);
     ESP_LOGD(TAG, "Heartbeat broadcast sent to all units");
 }
