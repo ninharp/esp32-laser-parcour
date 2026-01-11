@@ -137,7 +137,7 @@ esp32-laser-parcour/
 
 **Unterstützte Formate:** MP3, WAV
 
-**AKTUELLER TEST-ZUSTAND (10. Januar 2026):**
+**AKTUELLER TEST-ZUSTAND (11. Januar 2026):**
 - ⚠️ **SIMPLE TEST PIPELINE:** `http → mp3 → i2s` (NUR diese 3 Elemente)
 - ❌ Equalizer/Resample sind ERSTELLT aber NICHT in Pipeline registriert (testweise deaktiviert)
 - ❌ `init_i2s_stream()` Funktion ist AUSKOMMENTIERT (testweise)
@@ -150,12 +150,18 @@ esp32-laser-parcour/
   - Lösung: `sound_manager_start_streaming()` wird von `module_control.c` nach WiFi-Init aufgerufen
   - Pipeline wird bei Init erstellt aber NICHT gestartet
   - Start erfolgt explizit nach erfolgreicher WiFi-Verbindung
-- ✅ **FIX 3:** Pipeline Reset nach Playback (11. Januar 2026)
-  - Problem: Erstes Sound-File funktioniert, alle weiteren nicht
-  - Ursache: Pipeline blieb im TERMINATED state, konnte nicht neu gestartet werden
-  - Lösung: `audio_pipeline_reset_ringbuffer()` + `audio_pipeline_reset_elements()` nach jedem Stop
-  - Implementiert in `audio_event_task()` (AEL_STATE_FINISHED) und `sound_manager_stop()`
-  - Jetzt funktioniert sequentielles Abspielen mehrerer Sound-Dateien
+- ✅ **FIX 3:** RESET statt TERMINATE für sequentielles Playback (11. Januar 2026)
+  - ❌ **FALSCHE Lösung (entfernt):** `audio_pipeline_reset()` NACH `terminate()` → Queue-Corruption-Crash
+  - ✅ **RICHTIGE Lösung:** `audio_pipeline_reset_ringbuffer()` + `reset_elements()` STATT `terminate()`
+  - **Problem:** `terminate()` ist ASYNCHRON und zerstört Queue-State während Events noch laufen
+  - **Root Cause:** `prvNotifyQueueSetContainer` Assert-Crash bei schnellen Stop→Play-Sequenzen
+  - **Lösung:** Pipeline bleibt LEBENDIG für Wiederverwendung:
+    - `stop()` → `wait_for_stop()` → `reset_ringbuffer()` → `reset_elements()` → `run()`
+    - `terminate()` nur in `sound_manager_deinit()` beim endgültigen Shutdown
+  - Implementiert in:
+    - `audio_event_task()`: AEL_STATE_FINISHED Handler (Loop + Once Mode)
+    - `sound_manager_stop()`: Manueller Stop zwischen Songs
+  - Jetzt funktioniert sequentielles Abspielen mehrerer Sound-Dateien OHNE Crashes
 - 🔄 **NÄCHSTER SCHRITT:** Erst wenn grundlegende Audio-Wiedergabe funktioniert:
   - Equalizer/Resample zur Pipeline hinzufügen
   - `init_i2s_stream()` Funktion reaktivieren

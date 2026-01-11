@@ -95,15 +95,20 @@ static void audio_event_task(void *pvParameters)
                             
                             // Loop if needed
                             if (current_mode == SOUND_MODE_LOOP) {
+                                ESP_LOGD(TAG, "Looping audio...");
                                 audio_pipeline_stop(pipeline);
                                 audio_pipeline_wait_for_stop(pipeline);
+                                // Reset for loop restart
                                 audio_pipeline_reset_ringbuffer(pipeline);
                                 audio_pipeline_reset_elements(pipeline);
                                 audio_pipeline_run(pipeline);
                             } else {
+                                ESP_LOGD(TAG, "Stopping playback (finished)");
                                 audio_pipeline_stop(pipeline);
                                 audio_pipeline_wait_for_stop(pipeline);
-                                audio_pipeline_terminate(pipeline);
+                                // Reset for next playback (don't terminate - causes race condition)
+                                audio_pipeline_reset_ringbuffer(pipeline);
+                                audio_pipeline_reset_elements(pipeline);
                             }
                         }
                     } else if (msg.cmd == AEL_MSG_CMD_REPORT_MUSIC_INFO) {
@@ -214,6 +219,7 @@ static esp_err_t init_pipeline(void)
     ESP_LOGD(TAG, "[2.0] Register all elements to audio pipeline");
     audio_pipeline_register(pipeline, fatfs_reader,       "fatfs");
     audio_pipeline_register(pipeline, mp3_decoder,        "mp3");
+    // audio_pipeline_register(pipeline, wav_decoder,        "wav");
     audio_pipeline_register(pipeline, i2s_stream_writer,  "i2s");
 
     // Link it together: http_stream --> mp3_decoder --> i2s_stream (simple test pipeline)
@@ -367,15 +373,18 @@ esp_err_t sound_manager_play_file(const char *filename, sound_mode_t mode)
     ESP_LOGI(TAG, "Playing: %s (mode: %s)", filepath, mode == SOUND_MODE_LOOP ? "loop" : "once");
     
     // Determine decoder based on file extension
-    audio_element_handle_t decoder = NULL;
-    if (strstr(filename, ".mp3") || strstr(filename, ".MP3")) {
-        decoder = mp3_decoder;
-    } else if (strstr(filename, ".wav") || strstr(filename, ".WAV")) {
-        decoder = wav_decoder;
-    } else {
-        ESP_LOGE(TAG, "Unsupported file format: %s", filename);
-        return ESP_ERR_NOT_SUPPORTED;
-    }
+    // TODO
+    // audio_element_handle_t decoder = NULL;
+    // if (strstr(filename, ".mp3") || strstr(filename, ".MP3")) {
+    //     decoder = mp3_decoder;
+    // } else if (strstr(filename, ".wav") || strstr(filename, ".WAV")) {
+    //     decoder = wav_decoder;
+    // } else {
+    //     ESP_LOGE(TAG, "Unsupported file format: %s", filename);
+    //     return ESP_ERR_NOT_SUPPORTED;
+    // }
+
+    // audio_pipeline_unlink(pipeline);
     
     // Set URI
     ESP_LOGD(TAG, "[2.4] Set URI for fatfs reader: %s", filepath);
@@ -419,9 +428,13 @@ esp_err_t sound_manager_stop(void)
         ESP_LOGI(TAG, "Stopping playback");
         audio_pipeline_stop(pipeline);
         audio_pipeline_wait_for_stop(pipeline);
-        audio_pipeline_terminate(pipeline);
         
-        // CRITICAL: Pause I2S to prevent noise/crackling after stop
+        // Reset pipeline for next playback (synchronous, safe for reuse)
+        // DON'T use terminate() - it's async and causes queue corruption
+        audio_pipeline_reset_ringbuffer(pipeline);
+        audio_pipeline_reset_elements(pipeline);
+        
+        // Pause I2S to prevent noise/crackling after stop
         audio_element_pause(i2s_stream_writer);
         
         is_playing = false;
