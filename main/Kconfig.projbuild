@@ -99,14 +99,14 @@ menu "Laser Parcour Configuration"
         config PENALTY_TIME
             int "Beam Break Penalty (seconds)"
             range 0 30
-            default 5
+            default 15
             help
                 Time penalty in seconds for each beam break.
 
         config COUNTDOWN_DURATION
             int "Pre-Game Countdown (seconds)"
             range 3 10
-            default 5
+            default 4
             help
                 Countdown duration before game starts.
 
