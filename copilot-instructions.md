@@ -917,7 +917,7 @@ CONFIG_SENSOR_LED_RED_PIN=2
 
 ### ESP-NOW Pairing Issues
 
-**Problem:** ESP_ERR_ESPNOW_IF beim Senden von Messages
+**Problem 1:** ESP_ERR_ESPNOW_IF beim Senden von Messages
 **Ursache:** WiFi war nur im AP-Modus, ESP-NOW benötigt STA-Interface
 **Lösung:**
 1. Main Unit WiFi explizit in APSTA-Modus setzen BEVOR wifi_connect_with_fallback()
@@ -926,6 +926,20 @@ CONFIG_SENSOR_LED_RED_PIN=2
 **Code-Änderungen:**
 - `main/main.c`: WiFi APSTA-Init vor wifi_connect_with_fallback()
 - `wifi_ap_manager.c`: Prüfung auf aktuellen WiFi-Modus vor set_mode(WIFI_MODE_AP)
+
+**Problem 2:** ESP_ERR_ESPNOW_NOT_FOUND beim Senden von Finish/Laser Units (11. Januar 2026)
+**Ursache:** Finish/Laser Units empfangen Pairing-Response, aber fügen Main Unit NICHT als ESP-NOW Peer hinzu
+**Symptom:** "Paired: Yes" aber "Failed to send message: ESP_ERR_ESPNOW_NOT_FOUND"
+**Root Cause:** `espnow_recv_cb` fügt Sender NICHT automatisch als Peer hinzu
+**Lösung:** `espnow_add_peer()` explizit in MSG_PAIRING_RESPONSE Handler aufrufen
+
+**Code-Änderungen (11. Januar 2026):**
+- `main/module_finish.c`: `espnow_add_peer(main_unit_mac, ...)` in MSG_PAIRING_RESPONSE Handler (Zeile ~195)
+- `main/module_finish.c`: `espnow_remove_peer(main_unit_mac)` in MSG_RESET Handler vor State-Reset
+- `main/module_laser.c`: Peer-Handling bereits korrekt (war schon implementiert)
+- `main/module_laser.c`: `espnow_remove_peer(main_unit_mac)` in MSG_RESET Handler hinzugefügt
+
+**Kritisch:** Ohne `espnow_add_peer()` nach Pairing können Units NICHT senden, nur empfangen!
 
 ### Game Start Broadcasting
 

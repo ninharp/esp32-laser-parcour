@@ -195,6 +195,14 @@ static void espnow_recv_callback_finish(const uint8_t *sender_mac, const espnow_
                          main_unit_mac[0], main_unit_mac[1], main_unit_mac[2],
                          main_unit_mac[3], main_unit_mac[4], main_unit_mac[5]);
                 
+                // CRITICAL: Add main unit as ESP-NOW peer for sending messages
+                esp_err_t err = espnow_add_peer(main_unit_mac, 0, 0); // module_id=0, role=0 for main
+                if (err != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to add main unit as peer: %s", esp_err_to_name(err));
+                } else {
+                    ESP_LOGI(TAG, "Main unit added as ESP-NOW peer");
+                }
+                
                 // Stop channel scanning
                 channel_scanning = false;
                 
@@ -212,6 +220,17 @@ static void espnow_recv_callback_finish(const uint8_t *sender_mac, const espnow_
             
         case MSG_RESET:
             ESP_LOGI(TAG, "Reset command received - resetting pairing state");
+            
+            // Remove main unit from ESP-NOW peers if paired
+            if (is_paired) {
+                esp_err_t err = espnow_remove_peer(main_unit_mac);
+                if (err != ESP_OK) {
+                    ESP_LOGW(TAG, "Failed to remove peer: %s", esp_err_to_name(err));
+                } else {
+                    ESP_LOGI(TAG, "Main unit removed from ESP-NOW peers");
+                }
+            }
+            
             is_paired = false;
             channel_scanning = true;
             scanning_channel_index = 0;
