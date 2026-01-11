@@ -236,6 +236,7 @@ static void display_update_task(void *pvParameters)
             case GAME_STATE_COMPLETE:
                 // Only display results once to avoid infinite logging
                 if (!complete_screen_shown) {
+                    sound_manager_play_event(SOUND_EVENT_SUCCESS, SOUND_MODE_ONCE);
                     display_set_screen(SCREEN_GAME_COMPLETE);
                     if (game_get_player_data(&player_data) == ESP_OK) {
                         display_game_results(player_data.elapsed_time,
@@ -452,6 +453,7 @@ static esp_err_t game_control_callback(const char *command, const char *data)
             vTaskDelay(pdMS_TO_TICKS(5000));  // Show for 5 seconds
             display_set_screen(SCREEN_IDLE);
             display_update();
+            // TODO ifguards wenn no sound player
             sound_manager_play_event(SOUND_EVENT_ERROR, SOUND_MODE_ONCE);
         }
     } else if (strcmp(command, "stop") == 0) {
