@@ -580,13 +580,13 @@ void module_control_init(void)
     
     // Count enabled buttons
     uint8_t num_buttons = 0;
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < MAX_BUTTONS; i++) {
         if (buttons[i].pin != -1) num_buttons++;
     }
     
     if (num_buttons > 0) {
         ESP_LOGI(TAG, "  Initializing %d buttons", num_buttons);
-        ESP_ERROR_CHECK(button_handler_init(buttons, 4, button_event_callback));
+        ESP_ERROR_CHECK(button_handler_init(buttons, 3, button_event_callback));
     } else {
         ESP_LOGI(TAG, "  Buttons disabled (all pins = -1)");
     }

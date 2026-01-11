@@ -19,6 +19,8 @@
 extern "C" {
 #endif
 
+#define MAX_BUTTONS 3
+
 /**
  * Button event types
  */
