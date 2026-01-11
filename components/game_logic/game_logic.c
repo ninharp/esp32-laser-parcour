@@ -34,7 +34,7 @@ static game_config_t configuration = {
 // Penalty tracking
 static uint32_t penalty_start_time = 0;
 static uint32_t total_penalty_time = 0;  // Accumulated penalty time in ms
-#define PENALTY_DISPLAY_TIME_MS 3000  // Show PENALTY state for 3 seconds
+#define PENALTY_DISPLAY_TIME_MS 1000  // Show PENALTY state for 1 second
 
 // Countdown timer
 static esp_timer_handle_t countdown_timer = NULL;

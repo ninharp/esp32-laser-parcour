@@ -41,6 +41,9 @@ static esp_timer_handle_t heartbeat_timer = NULL;
 // Last countdown value for buzzer triggering
 static int last_countdown_value = -1;
 
+// Beam break sound played flag
+static bool beam_break_sound_played = false;
+
 #ifdef CONFIG_ENABLE_SD_CARD
 /**
  * List directory contents on SD card
@@ -197,10 +200,15 @@ static void display_update_task(void *pvParameters)
                     display_game_status(player_data.elapsed_time, 
                                       player_data.beam_breaks);
                 }
+                beam_break_sound_played = false; // Reset beam break sound flag
                 break;
                 
             case GAME_STATE_PENALTY:
                 display_set_screen(SCREEN_GAME_PAUSED); // Reuse PAUSED screen for PENALTY
+                if (!beam_break_sound_played) {
+                    sound_manager_play_event(SOUND_EVENT_BEAM_BREAK, SOUND_MODE_ONCE);
+                    beam_break_sound_played = true;
+                }
                 if (game_get_player_data(&player_data) == ESP_OK) {
                     // Clear and show penalty message
                     display_clear();
@@ -280,7 +288,7 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
     ESP_LOGI(TAG, "Button %d event: %d", button_id, event);
     
     if (event == BUTTON_EVENT_CLICK) {
-        sound_manager_play_event(SOUND_EVENT_BUTTON_PRESS, SOUND_MODE_ONCE);
+        // sound_manager_play_event(SOUND_EVENT_BUTTON_PRESS, SOUND_MODE_ONCE);
         
         switch (button_id) {
             case 0:  // Button 1 - Start/Stop
@@ -387,7 +395,7 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
         // Long press on Button 1: Turn all lasers ON/OFF
         if (button_id == 0) {
             ESP_LOGI(TAG, "Long press on Start/Stop button - toggling all lasers");
-            sound_manager_play_event(SOUND_EVENT_BUTTON_PRESS, SOUND_MODE_ONCE);
+            // sound_manager_play_event(SOUND_EVENT_BUTTON_PRESS, SOUND_MODE_ONCE);
             
             // Get all laser units
             laser_unit_info_t units[MAX_LASER_UNITS];
