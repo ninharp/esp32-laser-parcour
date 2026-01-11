@@ -121,7 +121,21 @@ esp32-laser-parcour/
 - Hardware: MAX98357A Class-D Amplifier, SD_MODE hardwired active
 - Symptom: Kontinuierliches Krächzen auch ohne Wiedergabe
 - Debugging-Ansatz: HTTP-Stream-Wiedergabe aus bekanntem funktionierendem Beispiel
-- Status: In Diagnose - Grundlegende Wiedergabe ERST testen bevor weitere Features
+- Status: ✅ **BEHOBEN** (11. Januar 2026) - Audio Pipeline funktioniert
+
+**Sound-Dateien (SD Card: /sdcard/sounds/):**
+- `startup2.mp3` - System Startup (SOUND_EVENT_STARTUP)
+- `button.mp3` - Button Press (SOUND_EVENT_BUTTON_PRESS)
+- `start.mp3` - Game Start (SOUND_EVENT_GAME_START)
+- `beep.mp3` - Countdown Tick (SOUND_EVENT_COUNTDOWN)
+- `bg.mp3` - Background Music Loop (SOUND_EVENT_GAME_RUNNING)
+- `penalty.mp3` - Laser Beam Broken (SOUND_EVENT_BEAM_BREAK)
+- `finish.mp3` - Game Complete (SOUND_EVENT_GAME_FINISH)
+- `stop.mp3` - Game Stopped (SOUND_EVENT_GAME_STOP)
+- `error.mp3` - Error Sound (SOUND_EVENT_ERROR)
+- `success.mp3` - Success/Confirmation (SOUND_EVENT_SUCCESS)
+
+**Unterstützte Formate:** MP3, WAV
 
 **AKTUELLER TEST-ZUSTAND (10. Januar 2026):**
 - ⚠️ **SIMPLE TEST PIPELINE:** `http → mp3 → i2s` (NUR diese 3 Elemente)
@@ -136,6 +150,12 @@ esp32-laser-parcour/
   - Lösung: `sound_manager_start_streaming()` wird von `module_control.c` nach WiFi-Init aufgerufen
   - Pipeline wird bei Init erstellt aber NICHT gestartet
   - Start erfolgt explizit nach erfolgreicher WiFi-Verbindung
+- ✅ **FIX 3:** Pipeline Reset nach Playback (11. Januar 2026)
+  - Problem: Erstes Sound-File funktioniert, alle weiteren nicht
+  - Ursache: Pipeline blieb im TERMINATED state, konnte nicht neu gestartet werden
+  - Lösung: `audio_pipeline_reset_ringbuffer()` + `audio_pipeline_reset_elements()` nach jedem Stop
+  - Implementiert in `audio_event_task()` (AEL_STATE_FINISHED) und `sound_manager_stop()`
+  - Jetzt funktioniert sequentielles Abspielen mehrerer Sound-Dateien
 - 🔄 **NÄCHSTER SCHRITT:** Erst wenn grundlegende Audio-Wiedergabe funktioniert:
   - Equalizer/Resample zur Pipeline hinzufügen
   - `init_i2s_stream()` Funktion reaktivieren

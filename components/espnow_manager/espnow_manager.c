@@ -188,7 +188,7 @@ esp_err_t espnow_add_peer(const uint8_t *mac_addr, uint8_t module_id, uint8_t mo
     
     // Check if peer already exists
     if (esp_now_is_peer_exist(mac_addr)) {
-        ESP_LOGW(TAG, "Peer already exists");
+        ESP_LOGD(TAG, "Peer already exists");
         return ESP_OK;
     }
     

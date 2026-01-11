@@ -317,7 +317,20 @@ You can customize the web interface by using an SD card:
    └── assets/       (optional)
        ├── logo.png
        └── sounds/
+   /sounds/          (for audio feedback - requires MAX98357A I2S amplifier)
+   ├── startup2.mp3  (system startup)
+   ├── button.mp3    (button press)
+   ├── start.mp3     (game start)
+   ├── beep.mp3      (countdown tick)
+   ├── bg.mp3        (background music - loop)
+   ├── penalty.mp3   (laser beam broken)
+   ├── finish.mp3    (game complete)
+   ├── stop.mp3      (game stopped)
+   ├── error.mp3     (error sound)
+   └── success.mp3   (success/confirmation)
    ```
+   
+   > 📢 **Note**: Sound files are MP3 format. WAV files also supported. Sounds are optional - system works with buzzer-only feedback if no I2S audio configured.
 3. **Enable SD Card** in menuconfig
 4. **Configure SPI pins** for SD card module
 5. **Insert SD card** into main unit

@@ -473,7 +473,7 @@ static esp_err_t game_control_callback(const char *command, const char *data)
  */
 static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_message_t *message)
 {
-    ESP_LOGI(TAG, "ESP-NOW message received from %02X:%02X:%02X:%02X:%02X:%02X",
+    ESP_LOGD(TAG, "ESP-NOW message received from %02X:%02X:%02X:%02X:%02X:%02X",
              sender_mac[0], sender_mac[1], sender_mac[2], 
              sender_mac[3], sender_mac[4], sender_mac[5]);
     
@@ -482,7 +482,7 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
     
     switch (message->msg_type) {
         case MSG_BEAM_BROKEN:
-            ESP_LOGW(TAG, "Beam broken on module %d!", message->module_id);
+            ESP_LOGI(TAG, "Beam broken on module %d!", message->module_id);
             game_beam_broken(message->module_id);
             break;
         case MSG_FINISH_PRESSED:
@@ -495,7 +495,7 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
                 esp_err_t peer_ret = espnow_add_peer(sender_mac, message->module_id, 1);
                 if (peer_ret == ESP_OK) {
                     // Only log when peer is actually added (e.g., after main unit restart)
-                    ESP_LOGI(TAG, "Laser unit %d re-added as ESP-NOW peer", message->module_id);
+                    // ESP_LOGD(TAG, "Laser unit %d re-added as ESP-NOW peer", message->module_id);
                 } else if (peer_ret != ESP_ERR_ESPNOW_EXIST) {
                     ESP_LOGE(TAG, "Failed to add peer during heartbeat: %s", esp_err_to_name(peer_ret));
                 }
@@ -687,7 +687,7 @@ void module_control_init(void)
     }
     
     // Initialize web server
-    ESP_LOGI(TAG, "  Initializing Web Server (http://192.168.4.1)");
+    ESP_LOGI(TAG, "  Initializing Web Server");
     ESP_ERROR_CHECK(web_server_init(NULL, game_control_callback));
     
     // Initialize ESP-NOW

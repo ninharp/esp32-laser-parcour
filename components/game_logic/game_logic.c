@@ -321,7 +321,7 @@ esp_err_t game_stop(void)
     xSemaphoreGive(game_mutex);
     
     // Send MSG_GAME_STOP to all registered laser units (unicast)
-    ESP_LOGI(TAG, "Sending MSG_GAME_STOP to all laser units");
+    ESP_LOGD(TAG, "Sending MSG_GAME_STOP to all laser units");
     
     // Get current laser units list
     laser_unit_info_t units[MAX_LASER_UNITS];
@@ -632,13 +632,13 @@ bool game_has_laser_units(void)
 {
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
     
-    ESP_LOGI(TAG, "Checking for laser units: total units=%zu", laser_unit_count);
+    ESP_LOGD(TAG, "Checking for laser units: total units=%zu", laser_unit_count);
     
     // Check if at least one laser unit (role=1) is online
     for (size_t i = 0; i < laser_unit_count; i++) {
         uint32_t time_since_last_seen = now - laser_units[i].last_seen;
         
-        ESP_LOGI(TAG, "Unit %d: role=%d, last_seen=%lums ago, online=%d", 
+        ESP_LOGD(TAG, "Unit %d: role=%d, last_seen=%lums ago, online=%d", 
                  laser_units[i].module_id, 
                  laser_units[i].role,
                  time_since_last_seen,
@@ -646,12 +646,12 @@ bool game_has_laser_units(void)
         
         // Unit is online if seen within last 15 seconds AND is a laser unit (role=1)
         if (time_since_last_seen <= 15000 && laser_units[i].role == 1) {
-            ESP_LOGI(TAG, "Found online laser unit %d", laser_units[i].module_id);
+            ESP_LOGD(TAG, "Found online laser unit %d", laser_units[i].module_id);
             return true;
         }
     }
     
-    ESP_LOGW(TAG, "No online laser units found!");
+    ESP_LOGD(TAG, "No online laser units found!");
     return false;
 }
 
