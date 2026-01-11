@@ -206,7 +206,7 @@ static esp_err_t init_pipeline(void)
     i2s_cfg.std_cfg.gpio_cfg.mclk = I2S_GPIO_UNUSED;
     i2s_stream_writer = i2s_stream_init(&i2s_cfg);
     mem_assert(i2s_stream_writer);
-    ESP_ESP_LOGDOGI(TAG, "[1.7] I2S stream initialized: BCLK=%d, WS=%d, DOUT=%d", 
+    ESP_LOGD(TAG, "[1.7] I2S stream initialized: BCLK=%d, WS=%d, DOUT=%d", 
              current_config.bck_io_num, current_config.ws_io_num, current_config.data_out_num);
     
     // Register ONLY basic elements (http→mp3→i2s) for testing
