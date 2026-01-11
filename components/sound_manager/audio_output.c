@@ -48,7 +48,7 @@ esp_err_t audio_play_event(audio_event_t event, bool loop)
         ret = sound_manager_play_event((sound_event_t)event, mode);
         
         if (ret == ESP_OK) {
-            ESP_LOGD(TAG, "Playing sound for event %d", event);
+            ESP_LOGI(TAG, "Playing sound for event %d", event);
             return ESP_OK;
         } else {
             ESP_LOGW(TAG, "Sound playback failed: %s, falling back to buzzer", 
@@ -63,7 +63,7 @@ esp_err_t audio_play_event(audio_event_t event, bool loop)
     ret = buzzer_play_pattern(pattern);
     
     if (ret == ESP_OK) {
-        ESP_LOGD(TAG, "Playing buzzer pattern for event %d", event);
+        ESP_LOGI(TAG, "Playing buzzer pattern for event %d", event);
     } else {
         ESP_LOGW(TAG, "Buzzer playback failed: %s", esp_err_to_name(ret));
     }

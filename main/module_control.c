@@ -49,7 +49,7 @@ static void list_sd_directory(const char *path, int max_files)
 {
     DIR *dir = opendir(path);
     if (!dir) {
-        ESP_LOGD(TAG, "    Directory not found: %s", path);
+        ESP_LOGI(TAG, "    Directory not found: %s", path);
         return;
     }
     
@@ -100,8 +100,8 @@ static void list_sd_card_structure(void)
     const char *important_dirs[] = {
         "/sdcard/web",
         "/sdcard/sounds",
-        "/sdcard/logs",
-        "/sdcard/config"
+        // "/sdcard/logs",
+        // "/sdcard/config"
     };
     
     for (int i = 0; i < sizeof(important_dirs) / sizeof(important_dirs[0]); i++) {
@@ -130,7 +130,7 @@ static void heartbeat_timer_callback(void *arg)
  */
 static void display_update_task(void *pvParameters)
 {
-    ESP_LOGI(TAG, "Display update task started");
+    ESP_LOGD(TAG, "Display update task started");
     
     TickType_t last_wake_time = xTaskGetTickCount();
     const TickType_t update_interval = pdMS_TO_TICKS(100); // Update every 100ms
@@ -186,7 +186,7 @@ static void display_update_task(void *pvParameters)
                     if (countdown_remaining > 0 && last_countdown_value != countdown_remaining) {
                         last_countdown_value = countdown_remaining;
                         sound_manager_play_event(SOUND_EVENT_COUNTDOWN, SOUND_MODE_ONCE);
-                        ESP_LOGI(TAG, "Countdown beep: %lu", (unsigned long)countdown_remaining);
+                        ESP_LOGD(TAG, "Countdown beep: %lu", (unsigned long)countdown_remaining);
                     }
                 }
                 break;
