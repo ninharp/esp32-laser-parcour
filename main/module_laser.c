@@ -35,7 +35,7 @@ static uint8_t main_unit_mac[6] = {0};  // MAC address of paired main unit
 
 // Safety mechanism
 static int64_t last_main_unit_heartbeat = 0;  // Timestamp of last heartbeat from main unit
-static const int64_t HEARTBEAT_TIMEOUT_US = 10000000;  // 10 seconds in microseconds
+static const int64_t HEARTBEAT_TIMEOUT_US = 30000000;  // 30 seconds in microseconds
 
 // Channel scanning state
 static uint8_t current_scan_channel = CONFIG_ESPNOW_CHANNEL;
