@@ -377,7 +377,7 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                         ESP_LOGI(TAG, "Debug Finish button pressed - triggering game finish");
                         esp_err_t ret = game_finish();
                         if (ret == ESP_OK) {
-                            sound_manager_play_event(SOUND_EVENT_SUCCESS, SOUND_MODE_ONCE);
+                            // sound_manager_play_event(SOUND_EVENT_SUCCESS, SOUND_MODE_ONCE);
                             ESP_LOGI(TAG, "Game finished (debug)");
                         } else {
                             sound_manager_play_event(SOUND_EVENT_ERROR, SOUND_MODE_ONCE);
