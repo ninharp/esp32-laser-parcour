@@ -637,7 +637,7 @@ void module_control_init(void)
         esp_err_t sound_ret = sound_manager_init(NULL);  // NULL = use menuconfig settings
         if (sound_ret == ESP_OK) {
             ESP_LOGI(TAG, "  Sound Manager initialized - audio playback enabled");
-            //sound_manager_play_event(SOUND_EVENT_STARTUP, SOUND_MODE_ONCE);
+            sound_manager_play_event(SOUND_EVENT_STARTUP, SOUND_MODE_ONCE);
         } else {
             ESP_LOGW(TAG, "  Sound Manager initialization failed, using buzzer fallback");
         }
@@ -674,13 +674,13 @@ void module_control_init(void)
         
         #ifdef CONFIG_ENABLE_SOUND_MANAGER
         // Start HTTP streaming now that WiFi is connected
-        ESP_LOGI(TAG, "  Starting audio streaming (WiFi connected)...");
-        esp_err_t stream_ret = sound_manager_start_streaming();
-        if (stream_ret == ESP_OK) {
-            ESP_LOGI(TAG, "  Audio streaming started");
-        } else {
-            ESP_LOGW(TAG, "  Failed to start audio streaming: %s", esp_err_to_name(stream_ret));
-        }
+        // ESP_LOGI(TAG, "  Starting audio streaming (WiFi connected)...");
+        // esp_err_t stream_ret = sound_manager_start_streaming();
+        // if (stream_ret == ESP_OK) {
+        //     ESP_LOGI(TAG, "  Audio streaming started");
+        // } else {
+        //     ESP_LOGW(TAG, "  Failed to start audio streaming: %s", esp_err_to_name(stream_ret));
+        // }
         #endif
     } else {
         ESP_LOGI(TAG, "  Running in AP mode (Fallback): http://192.168.4.1");

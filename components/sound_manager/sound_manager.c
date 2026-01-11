@@ -23,6 +23,7 @@
 #include "audio_element.h"
 #include "audio_event_iface.h"
 #include "audio_common.h"
+#include "audio_hal.h"
 #include "i2s_stream.h"
 #include "http_stream.h"
 #include "mp3_decoder.h"
@@ -39,16 +40,16 @@ static const char *TAG = "SOUND_MGR";
 
 // Default sound file mappings - using WAV for better compatibility with MAX98357A
 static const char *default_sound_files[SOUND_EVENT_MAX] = {
-    [SOUND_EVENT_STARTUP] = "startup2.wav",
-    [SOUND_EVENT_BUTTON_PRESS] = "button.wav",
-    [SOUND_EVENT_GAME_START] = "game_start.wav",
-    [SOUND_EVENT_COUNTDOWN] = "countdown.wav",
-    [SOUND_EVENT_GAME_RUNNING] = "background.wav",
-    [SOUND_EVENT_BEAM_BREAK] = "penalty.wav",
-    [SOUND_EVENT_GAME_FINISH] = "finish.wav",
-    [SOUND_EVENT_GAME_STOP] = "game_stop.wav",
-    [SOUND_EVENT_ERROR] = "error.wav",
-    [SOUND_EVENT_SUCCESS] = "success.wav"
+    [SOUND_EVENT_STARTUP] = "startup2.mp3",
+    [SOUND_EVENT_BUTTON_PRESS] = "button.mp3",
+    [SOUND_EVENT_GAME_START] = "game_start.mp3",
+    [SOUND_EVENT_COUNTDOWN] = "countdown.mp3",
+    [SOUND_EVENT_GAME_RUNNING] = "background.mp3",
+    [SOUND_EVENT_BEAM_BREAK] = "penalty.mp3",
+    [SOUND_EVENT_GAME_FINISH] = "finish.mp3",
+    [SOUND_EVENT_GAME_STOP] = "game_stop.mp3",
+    [SOUND_EVENT_ERROR] = "error.mp3",
+    [SOUND_EVENT_SUCCESS] = "success.mp3"
 };
 
 // Audio pipeline components
@@ -125,43 +126,12 @@ static void audio_event_task(void *pvParameters)
 }
 
 /**
- * Initialize I2S stream - optimized for MAX98357A
- */
-static esp_err_t init_i2s_stream(void)
-{
-    // Use ESP-ADF default configuration
-    ESP_LOGI(TAG, "[2.0] Create i2s stream to write data to codec chip");
-    i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
-    i2s_cfg.type = AUDIO_STREAM_WRITER;
-    
-    // Override GPIO pins for MAX98357A
-    i2s_cfg.std_cfg.gpio_cfg.bclk = current_config.bck_io_num;   // GPIO4
-    i2s_cfg.std_cfg.gpio_cfg.ws = current_config.ws_io_num;       // GPIO0  
-    i2s_cfg.std_cfg.gpio_cfg.dout = current_config.data_out_num;  // GPIO1
-    i2s_cfg.std_cfg.gpio_cfg.din = I2S_GPIO_UNUSED;
-    i2s_cfg.std_cfg.gpio_cfg.mclk = I2S_GPIO_UNUSED;
-    
-    i2s_stream_writer = i2s_stream_init(&i2s_cfg);
-    if (i2s_stream_writer == NULL) {
-        ESP_LOGE(TAG, "Failed to create I2S stream");
-        return ESP_FAIL;
-    }
-    
-    ESP_LOGI(TAG, "[2.0] I2S stream initialized for MAX98357A");
-    ESP_LOGI(TAG, "      GPIO: BCLK=%d, WS=%d, DOUT=%d", 
-             current_config.bck_io_num, current_config.ws_io_num, current_config.data_out_num);
-    ESP_LOGI(TAG, "      Sample rate: 44.1kHz, 16-bit stereo");
-    
-    return ESP_OK;
-}
-
-/**
  * Initialize audio pipeline
  */
 static esp_err_t init_pipeline(void)
 {
     // Create pipeline
-    ESP_LOGI(TAG, "[1.0] Create audio pipeline for playback");
+    ESP_LOGI(TAG, "[ 1 ] Create audio pipeline for playback");
     audio_pipeline_cfg_t pipeline_cfg = DEFAULT_AUDIO_PIPELINE_CONFIG();
     pipeline = audio_pipeline_init(&pipeline_cfg);
     if (pipeline == NULL) {
@@ -242,25 +212,32 @@ static esp_err_t init_pipeline(void)
     // Register ONLY basic elements (http→mp3→i2s) for testing
     // equalizer and resample_filter are created above but NOT registered (testing phase)
     ESP_LOGI(TAG, "[2.0] Register all elements to audio pipeline");
-    audio_pipeline_register(pipeline, http_stream_reader, "http");
+    audio_pipeline_register(pipeline, fatfs_reader,       "fatfs");
     audio_pipeline_register(pipeline, mp3_decoder,        "mp3");
     audio_pipeline_register(pipeline, i2s_stream_writer,  "i2s");
 
     // Link it together: http_stream --> mp3_decoder --> i2s_stream (simple test pipeline)
     ESP_LOGI(TAG, "[2.1] Link elements: http-->mp3-->i2s (testing without equalizer/resample)");
-    const char *link_tag[3] = {"http", "mp3", "i2s"};
+    const char *link_tag[3] = {"fatfs", "mp3", "i2s"};
     audio_pipeline_link(pipeline, &link_tag[0], 3);
 
     // Set uri for http stream
-    ESP_LOGI(TAG, "[2.2] Set up  uri (http as http_stream, mp3 as mp3 decoder, and default output is i2s)");
+    // ESP_LOGI(TAG, "[2.2] Set up  uri (http as http_stream, mp3 as mp3 decoder, and default output is i2s)");
     // audio_element_set_uri(http_stream_reader, "https://dl.espressif.com/dl/audio/ff-16b-2c-44100hz.mp3");
-    audio_element_set_uri(http_stream_reader, "https://wdr-1live-live.icecast.wdr.de/wdr/1live/live/mp3/128/stream.mp3");
+    // audio_element_set_uri(http_stream_reader, "https://wdr-1live-live.icecast.wdr.de/wdr/1live/live/mp3/128/stream.mp3");
 
+    // Build full path
+    // char filepath[256];
+    // snprintf(filepath, sizeof(filepath), "%s/%s", current_config.sound_dir, "startup2.mp3");
+    // ESP_LOGI(TAG, "[2.2] Set URI for fatfs reader: %s", filepath);
+    // audio_element_set_uri(fatfs_reader, filepath);
+    
+    // ESP_LOGI(TAG, "Audio pipeline: file -> decoder -> resample -> equalizer -> I2S");
     // Create I2S stream - DISABLED FOR TESTING (using inline creation above instead)
     // if (init_i2s_stream() != ESP_OK) {
     //     return ESP_FAIL;
     // }
-    
+
     // CRITICAL: Pause I2S immediately after init to prevent noise/crackling
     // I2S will resume automatically when pipeline starts playing
     // audio_element_pause(i2s_stream_writer);
@@ -276,10 +253,15 @@ static esp_err_t init_pipeline(void)
 
     // DON'T start pipeline yet - wait for WiFi connection!
     // Call sound_manager_start_streaming() after WiFi is connected
-    ESP_LOGI(TAG, "[ 4 ] Audio pipeline created (NOT started - waiting for WiFi)");
+    // ESP_LOGI(TAG, "[ 4 ] Audio pipeline created (NOT started - waiting for WiFi)");
     
     // Start event task
     xTaskCreate(audio_event_task, "audio_event", 3072, NULL, 5, NULL);
+
+    // Start pipeline
+    // audio_pipeline_run(pipeline);
+    // is_playing = true;
+    // sound_manager_play_file("startup2.mp3", SOUND_MODE_ONCE);
     
     ESP_LOGI(TAG, "Audio pipeline initialized (call start_streaming after WiFi connect)");
     return ESP_OK;
@@ -321,7 +303,7 @@ esp_err_t sound_manager_init(const sound_config_t *config)
     }
     
     // Load configuration from NVS
-    sound_manager_load_config();
+    // sound_manager_load_config();
     
     is_initialized = true;
     ESP_LOGI(TAG, "Sound manager initialized (I2S pins: BCK=%d, WS=%d, DOUT=%d)",
@@ -418,30 +400,30 @@ esp_err_t sound_manager_play_file(const char *filename, sound_mode_t mode)
     }
     
     // Reset pipeline
-    ESP_LOGI(TAG, "[2.1] Reset audio pipeline");
-    audio_pipeline_stop(pipeline);
-    audio_pipeline_wait_for_stop(pipeline);
-    audio_pipeline_terminate(pipeline);
-    audio_pipeline_reset_ringbuffer(pipeline);
-    audio_pipeline_reset_elements(pipeline);
-    audio_pipeline_unregister(pipeline, mp3_decoder);
-    audio_pipeline_unregister(pipeline, wav_decoder);
-    audio_pipeline_unregister(pipeline, resample_filter);
-    audio_pipeline_unregister(pipeline, equalizer);
+    // ESP_LOGI(TAG, "[2.1] Reset audio pipeline");
+    // audio_pipeline_stop(pipeline);
+    // audio_pipeline_wait_for_stop(pipeline);
+    // audio_pipeline_terminate(pipeline);
+    // audio_pipeline_reset_ringbuffer(pipeline);
+    // audio_pipeline_reset_elements(pipeline);
+    // audio_pipeline_unregister(pipeline, mp3_decoder);
+    // audio_pipeline_unregister(pipeline, wav_decoder);
+    // audio_pipeline_unregister(pipeline, resample_filter);
+    // audio_pipeline_unregister(pipeline, equalizer);
     
     // Register elements: file -> decoder -> resample -> equalizer -> i2s
     // This matches the webradio pipeline exactly!
-    ESP_LOGI(TAG, "[2.2] Register elements in pipeline: file -> decoder -> resample -> equalizer -> i2s");
-    audio_pipeline_register(pipeline, fatfs_reader, "file");
-    audio_pipeline_register(pipeline, decoder, "dec");
-    audio_pipeline_register(pipeline, resample_filter, "resample");
-    audio_pipeline_register(pipeline, equalizer, "eq");
-    audio_pipeline_register(pipeline, i2s_stream_writer, "i2s");
+    // ESP_LOGI(TAG, "[2.2] Register elements in pipeline: file -> decoder -> resample -> equalizer -> i2s");
+    // audio_pipeline_register(pipeline, fatfs_reader, "file");
+    // audio_pipeline_register(pipeline, decoder, "dec");
+    // audio_pipeline_register(pipeline, resample_filter, "resample");
+    // audio_pipeline_register(pipeline, equalizer, "eq");
+    // audio_pipeline_register(pipeline, i2s_stream_writer, "i2s");
     
-    // Link elements in chain: file -> decoder -> resample -> equalizer -> i2s
-    ESP_LOGI(TAG, "[2.3] Link elements in pipeline: file -> decoder -> resample -> equalizer -> i2s");
-    const char *link_tag[3] = {"file", "dec", "i2s"};
-    audio_pipeline_link(pipeline, &link_tag[0], 3);
+    // // Link elements in chain: file -> decoder -> resample -> equalizer -> i2s
+    // ESP_LOGI(TAG, "[2.3] Link elements in pipeline: file -> decoder -> resample -> equalizer -> i2s");
+    // const char *link_tag[3] = {"file", "dec", "i2s"};
+    // audio_pipeline_link(pipeline, &link_tag[0], 3);
     
     // Set URI
     ESP_LOGI(TAG, "[2.4] Set URI for fatfs reader: %s", filepath);
