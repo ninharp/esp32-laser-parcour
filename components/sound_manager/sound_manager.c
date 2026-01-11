@@ -42,12 +42,12 @@ static const char *TAG = "SOUND_MGR";
 static const char *default_sound_files[SOUND_EVENT_MAX] = {
     [SOUND_EVENT_STARTUP] = "startup2.mp3",
     [SOUND_EVENT_BUTTON_PRESS] = "button.mp3",
-    [SOUND_EVENT_GAME_START] = "game_start.mp3",
-    [SOUND_EVENT_COUNTDOWN] = "countdown.mp3",
-    [SOUND_EVENT_GAME_RUNNING] = "background.mp3",
+    [SOUND_EVENT_GAME_START] = "start.mp3",
+    [SOUND_EVENT_COUNTDOWN] = "beep.mp3",
+    [SOUND_EVENT_GAME_RUNNING] = "bg.mp3",
     [SOUND_EVENT_BEAM_BREAK] = "penalty.mp3",
     [SOUND_EVENT_GAME_FINISH] = "finish.mp3",
-    [SOUND_EVENT_GAME_STOP] = "game_stop.mp3",
+    [SOUND_EVENT_GAME_STOP] = "stop.mp3",
     [SOUND_EVENT_ERROR] = "error.mp3",
     [SOUND_EVENT_SUCCESS] = "success.mp3"
 };
