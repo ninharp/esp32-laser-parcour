@@ -70,7 +70,7 @@ esp_err_t sd_card_manager_init(const sd_card_config_t *config)
     
     // FAT-Dateisystem Mount-Konfiguration
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = true,  // Nicht formatieren bei Fehler
+        .format_if_mount_failed = false,  // Nicht formatieren bei Fehler
         .max_files = 5,                   // Maximal 5 gleichzeitig offene Dateien
         .allocation_unit_size = 16 * 1024 // 16 KB Cluster
     };
