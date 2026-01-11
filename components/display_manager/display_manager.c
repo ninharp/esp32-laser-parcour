@@ -177,12 +177,12 @@ esp_err_t display_countdown(uint8_t seconds)
     
 #ifdef CONFIG_OLED_SSD1306
     // Draw "Starting in..." text
-    ssd1306_draw_string(20, 1, "Starting in...");
+    ssd1306_draw_string(20, 0, "Starting in...");
     
     // Draw large countdown number (centered)
     char num[2] = {seconds + '0', 0};
     if (seconds < 10) {
-        ssd1306_draw_large_digit(50, 3, num[0]);
+        ssd1306_draw_large_digit(50, 2, num[0]);
     }
 #elif defined(CONFIG_OLED_SH1106)
     // SH1106 implementation (TODO)
