@@ -18,6 +18,7 @@
 #include "esp_netif.h"
 #include "nvs_flash.h"
 #include "esp_chip_info.h"
+#include "version.h"
 
 // Logging configuration
 #include "logging_config.h"
@@ -110,6 +111,7 @@ static void print_system_info(void)
     ESP_LOGI(TAG, "=================================================");
     ESP_LOGI(TAG, "   ESP32 Laser Obstacle Course System");
     ESP_LOGI(TAG, "=================================================");
+    ESP_LOGI(TAG, "Module Version: %s", PROJECT_VERSION);
     ESP_LOGI(TAG, "Module Role:    %s", MODULE_ROLE);
     ESP_LOGI(TAG, "Module ID:      %d", CONFIG_MODULE_ID);
     ESP_LOGI(TAG, "Device Name:    %s", CONFIG_DEVICE_NAME);
