@@ -296,6 +296,16 @@ Access the web interface by connecting to the main unit's WiFi network:
 - **Password**: lasergame (configurable)
 - **URL**: http://192.168.4.1
 
+### Screenshots
+
+<div align="center">
+  <img src="docs/main_screen.png" alt="Main Game Screen" width="600">
+  <p><em>Main Game Control Screen - Start games, monitor status, and control laser units</em></p>
+  
+  <img src="docs/sound_screen.png" alt="Sound Settings Screen" width="600">
+  <p><em>Sound Settings - Test audio playback and adjust volume settings</em></p>
+</div>
+
 ### Features
 - 🎮 Game control (start, stop, pause, resume)
 - 🔴 Individual laser ON/OFF control
