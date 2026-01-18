@@ -49,6 +49,7 @@ flash_download_tool*/
 temp/
 version.h
 /version.txt
+.github/
 
 # Distribution files
 dist/
