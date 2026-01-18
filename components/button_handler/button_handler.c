@@ -16,7 +16,6 @@
 
 static const char *TAG = "BUTTON";
 
-#define MAX_BUTTONS 4
 #define BUTTON_TASK_STACK_SIZE 4096  // Increased from 2048 to prevent stack overflow
 #define BUTTON_TASK_PRIORITY 5
 #define DOUBLE_CLICK_TIME_MS 300

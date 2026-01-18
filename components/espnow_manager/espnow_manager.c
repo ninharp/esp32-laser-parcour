@@ -31,8 +31,9 @@ static QueueHandle_t espnow_queue __attribute__((unused)) = NULL;
 
 /**
  * ESP-NOW send callback
+ * Note: IDF 5.5+ uses wifi_tx_info_t instead of mac_addr
  */
-static void espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status)
+static void espnow_send_cb(const wifi_tx_info_t *tx_info, esp_now_send_status_t status)
 {
     if (status == ESP_NOW_SEND_SUCCESS) {
         ESP_LOGD(TAG, "Message sent successfully");
@@ -187,7 +188,7 @@ esp_err_t espnow_add_peer(const uint8_t *mac_addr, uint8_t module_id, uint8_t mo
     
     // Check if peer already exists
     if (esp_now_is_peer_exist(mac_addr)) {
-        ESP_LOGW(TAG, "Peer already exists");
+        ESP_LOGD(TAG, "Peer already exists");
         return ESP_OK;
     }
     

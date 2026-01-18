@@ -5,12 +5,14 @@
 Ein modulares, ESP32-C3 basiertes Laser-Hindernisparcours-Spielsystem mit drahtloser Steuerung, Echtzeit-Überwachung und interaktivem Gaming-Erlebnis.
 
 **Technologie-Stack:**
-- ESP-IDF 5.4.2
+- ESP-IDF 5.5.2
+- ESP-ADF 2.7 (Audio Development Framework)
 - FreeRTOS
 - ESP-NOW (Wireless Communication)
 - I2C (OLED Display)
 - ADC (Sensor Detection)
 - LEDC PWM (Laser Control)
+- I2S (MAX98357A Audio Amplifier)
 - SD Card (Web Interface & High Scores)
 
 ---
@@ -93,6 +95,91 @@ esp32-laser-parcour/
 ---
 
 ## 🔄 Aktuelle Architektur-Änderungen (Januar 2026)
+
+### ESP-IDF 5.5.2 Migration (10. Januar 2026)
+
+**Upgrade von 5.4.2 → 5.5.2**
+- ✅ ESP-NOW API breaking changes behoben:
+  - `espnow_send_cb` Callback-Signatur geändert von `(const uint8_t *mac_addr, ...)` zu `(const wifi_tx_info_t *tx_info, ...)`
+  - `components/espnow_manager/espnow_manager.c` aktualisiert
+- ✅ WiFi API breaking changes behoben:
+  - `esp_wifi_set_config()` kann nicht mehr im laufenden WiFi-State aufgerufen werden
+  - Lösung: WiFi stoppen vor Rekonfiguration, dann neu starten
+  - `components/wifi_ap_manager/wifi_ap_manager.c:463` - `wifi_connect_sta()` gefixt
+  - Fehler war: `ESP_ERR_WIFI_STATE (0x3006)` beim Versuch config während WiFi started zu ändern
+- ✅ ESP-ADF Integration vereinfacht:
+  - Lokale `audio_stream` Komponente entfernt
+  - Verwendet jetzt native ESP-ADF Komponenten direkt
+  - `include($ENV{ADF_PATH}/CMakeLists.txt)` in Haupt-CMakeLists.txt
+- ✅ Konfiguration:
+  - `CONFIG_ESP32C3_DEFAULT_CPU_FREQ_160` → `CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_160`
+  - Alle deprecated Warnings bereinigt
+
+### Audio System Debugging (Januar 2026)
+
+**Problem:** Audio Crackling/Buzzing auf MAX98357A I2S Amplifier
+- Hardware: MAX98357A Class-D Amplifier, SD_MODE hardwired active
+- Symptom: Kontinuierliches Krächzen auch ohne Wiedergabe
+- Debugging-Ansatz: HTTP-Stream-Wiedergabe aus bekanntem funktionierendem Beispiel
+- Status: ✅ **BEHOBEN** (11. Januar 2026) - Audio Pipeline funktioniert
+
+**Sound-Dateien (SD Card: /sdcard/sounds/):**
+- `startup2.mp3` - System Startup (SOUND_EVENT_STARTUP)
+- `button.mp3` - Button Press (SOUND_EVENT_BUTTON_PRESS)
+- `start.mp3` - Game Start (SOUND_EVENT_GAME_START)
+- `beep.mp3` - Countdown Tick (SOUND_EVENT_COUNTDOWN)
+- `bg.mp3` - Background Music Loop (SOUND_EVENT_GAME_RUNNING)
+- `penalty.mp3` - Laser Beam Broken (SOUND_EVENT_BEAM_BREAK)
+- `finish.mp3` - Game Complete (SOUND_EVENT_GAME_FINISH)
+- `stop.mp3` - Game Stopped (SOUND_EVENT_GAME_STOP)
+- `error.mp3` - Error Sound (SOUND_EVENT_ERROR)
+- `success.mp3` - Success/Confirmation (SOUND_EVENT_SUCCESS)
+
+**Unterstützte Formate:** MP3, WAV
+
+**AKTUELLER TEST-ZUSTAND (11. Januar 2026):**
+- ⚠️ **SIMPLE TEST PIPELINE:** `http → mp3 → i2s` (NUR diese 3 Elemente)
+- ❌ Equalizer/Resample sind ERSTELLT aber NICHT in Pipeline registriert (testweise deaktiviert)
+- ❌ `init_i2s_stream()` Funktion ist AUSKOMMENTIERT (testweise)
+- ✅ **FIX 1:** I2S Stream wird INLINE erstellt (behebt NULL-Pointer-Crash)
+  - Problem war: `i2s_stream_writer` war NULL weil `init_i2s_stream()` auskommentiert war
+  - Lösung: I2S Stream direkt in `init_pipeline()` erstellen vor Pipeline-Registrierung
+  - Zeile ~220 in `sound_manager.c`: Inline I2S-Stream-Initialisierung
+- ✅ **FIX 2:** Pipeline startet NACH WiFi-Verbindung (behebt HTTP-Stream ohne Netzwerk)
+  - Problem: HTTP-Stream startete vor WiFi-Verbindung
+  - Lösung: `sound_manager_start_streaming()` wird von `module_control.c` nach WiFi-Init aufgerufen
+  - Pipeline wird bei Init erstellt aber NICHT gestartet
+  - Start erfolgt explizit nach erfolgreicher WiFi-Verbindung
+- ✅ **FIX 3:** RESET statt TERMINATE für sequentielles Playback (11. Januar 2026)
+  - ❌ **FALSCHE Lösung (entfernt):** `audio_pipeline_reset()` NACH `terminate()` → Queue-Corruption-Crash
+  - ✅ **RICHTIGE Lösung:** `audio_pipeline_reset_ringbuffer()` + `reset_elements()` STATT `terminate()`
+  - **Problem:** `terminate()` ist ASYNCHRON und zerstört Queue-State während Events noch laufen
+  - **Root Cause:** `prvNotifyQueueSetContainer` Assert-Crash bei schnellen Stop→Play-Sequenzen
+  - **Lösung:** Pipeline bleibt LEBENDIG für Wiederverwendung:
+    - `stop()` → `wait_for_stop()` → `reset_ringbuffer()` → `reset_elements()` → `run()`
+    - `terminate()` nur in `sound_manager_deinit()` beim endgültigen Shutdown
+  - Implementiert in:
+    - `audio_event_task()`: AEL_STATE_FINISHED Handler (Loop + Once Mode)
+    - `sound_manager_stop()`: Manueller Stop zwischen Songs
+  - Jetzt funktioniert sequentielles Abspielen mehrerer Sound-Dateien OHNE Crashes
+- 🔄 **NÄCHSTER SCHRITT:** Erst wenn grundlegende Audio-Wiedergabe funktioniert:
+  - Equalizer/Resample zur Pipeline hinzufügen
+  - `init_i2s_stream()` Funktion reaktivieren
+  - Vollständige Pipeline: `http → mp3 → resample → equalizer → i2s`
+
+**Wichtige Code-Stellen:**
+- `components/sound_manager/sound_manager.c:~220`: Inline I2S-Erstellung (TEMP FIX)
+- `components/sound_manager/sound_manager.c:~130`: `init_i2s_stream()` Funktion (auskommentiert)
+- `components/sound_manager/sound_manager.c:~228`: Pipeline Register (nur 3 Elemente)
+- `components/sound_manager/sound_manager.c:~234`: Link Chain (nur 3 Tags)
+- `main/module_control.c:~660-678`: WiFi-Connect mit `sound_manager_start_streaming()` Aufruf
+
+**API-Migration:**
+- Alte API: `audio_play_event(AUDIO_EVENT_*, false)` → Entfernt
+- Neue API: `sound_manager_play_event(SOUND_EVENT_*, SOUND_MODE_ONCE)`
+- Alle Aufrufe in `module_control.c` migriert (18 Stellen)
+- `audio_output.c` entfernt (obsolet, Funktionalität in sound_manager.c)
+- CMakeLists.txt bereinigt (audio_output.c Referenz entfernt)
 
 ### Modularisierung in separate Module
 
@@ -422,9 +509,10 @@ typedef void (*button_event_callback_t)(uint8_t button_id, button_event_t event)
 **Dependencies:** `driver` (GPIO), `freertos`, `esp_timer`
 
 **Konfigurationsoptionen (Kconfig):**
-- CONFIG_BUTTON1_PIN bis CONFIG_BUTTON4_PIN
+- CONFIG_BUTTON1_PIN bis CONFIG_BUTTON3_PIN
 - CONFIG_DEBOUNCE_TIME (default: 50ms)
 - CONFIG_ENABLE_BUTTONS (optional feature flag)
+- CONFIG_ENABLE_BUTTON3_DEBUG_FINISH (enable Button 3 as debug finish)
 
 **Verwendet von:** Main Unit (CONTROL Module)
 
@@ -829,7 +917,7 @@ CONFIG_SENSOR_LED_RED_PIN=2
 
 ### ESP-NOW Pairing Issues
 
-**Problem:** ESP_ERR_ESPNOW_IF beim Senden von Messages
+**Problem 1:** ESP_ERR_ESPNOW_IF beim Senden von Messages
 **Ursache:** WiFi war nur im AP-Modus, ESP-NOW benötigt STA-Interface
 **Lösung:**
 1. Main Unit WiFi explizit in APSTA-Modus setzen BEVOR wifi_connect_with_fallback()
@@ -838,6 +926,20 @@ CONFIG_SENSOR_LED_RED_PIN=2
 **Code-Änderungen:**
 - `main/main.c`: WiFi APSTA-Init vor wifi_connect_with_fallback()
 - `wifi_ap_manager.c`: Prüfung auf aktuellen WiFi-Modus vor set_mode(WIFI_MODE_AP)
+
+**Problem 2:** ESP_ERR_ESPNOW_NOT_FOUND beim Senden von Finish/Laser Units (11. Januar 2026)
+**Ursache:** Finish/Laser Units empfangen Pairing-Response, aber fügen Main Unit NICHT als ESP-NOW Peer hinzu
+**Symptom:** "Paired: Yes" aber "Failed to send message: ESP_ERR_ESPNOW_NOT_FOUND"
+**Root Cause:** `espnow_recv_cb` fügt Sender NICHT automatisch als Peer hinzu
+**Lösung:** `espnow_add_peer()` explizit in MSG_PAIRING_RESPONSE Handler aufrufen
+
+**Code-Änderungen (11. Januar 2026):**
+- `main/module_finish.c`: `espnow_add_peer(main_unit_mac, ...)` in MSG_PAIRING_RESPONSE Handler (Zeile ~195)
+- `main/module_finish.c`: `espnow_remove_peer(main_unit_mac)` in MSG_RESET Handler vor State-Reset
+- `main/module_laser.c`: Peer-Handling bereits korrekt (war schon implementiert)
+- `main/module_laser.c`: `espnow_remove_peer(main_unit_mac)` in MSG_RESET Handler hinzugefügt
+
+**Kritisch:** Ohne `espnow_add_peer()` nach Pairing können Units NICHT senden, nur empfangen!
 
 ### Game Start Broadcasting
 
@@ -962,6 +1064,11 @@ if (penalty_elapsed >= PENALTY_DISPLAY_TIME_MS) {  // 3000ms = 3 Sekunden
 - Main Unit aktualisiert `last_seen` Timestamp bei jedem Heartbeat
 - Laser Units ignorieren eigene Heartbeat-Broadcasts (MSG_HEARTBEAT Handler)
 - Units bleiben online solange Heartbeats empfangen werden
+- **Main Unit sendet auch Heartbeats** (5 Sekunden Intervall) zur Laser Unit Safety Timer Synchronisation
+- **Optimierung (10. Januar 2026):** Main Unit sendet KEINE Heartbeats wenn keine Laser Units verbunden
+  - Prüfung via `game_has_laser_units()` in `heartbeat_timer_callback()`
+  - Vermeidet unnötige ESP-NOW Broadcasts wenn System idle ist
+  - Reduziert Netzwerk-Traffic und Stromverbrauch
 
 ### Web Interface Status Updates
 

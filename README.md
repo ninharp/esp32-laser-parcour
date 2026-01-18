@@ -11,7 +11,7 @@ This project implements a distributed laser obstacle course system where players
 - **Finish Button**: Optional finish line button for successful game completion
 - **All modules communicate wirelessly via ESP-NOW** for low-latency, reliable communication
 
-Built with **ESP-IDF 5.4.2** for maximum performance and reliability.
+Built with **ESP-IDF 5.5.2** and **ESP-ADF 2.7** for maximum performance and reliability.
 
 ## ✨ Features
 
@@ -36,13 +36,12 @@ Built with **ESP-IDF 5.4.2** for maximum performance and reliability.
 ### User Interface  
 - 📱 **Web interface** - Full game control and monitoring via WiFi
 - 🖥️ **OLED display (optional)** - Shows game status, time, and results
-- 🔘 **Physical buttons (optional)** - 4-button control for standalone operation:
+- 🔘 **Physical buttons (optional)** - 3-button control for standalone operation:
   - **Button 1**: Start/Stop/Resume (long press: toggle all lasers)
-  - **Button 2**: Pause/Resume during game
-  - **Button 3**: Stop/Reset active game, returns to idle screen
-  - **Button 4**: Reserved for future use
-- 🎵 **Audio feedback (optional)** - Buzzer with multiple sound patterns
-- 💾 **SD Card support (optional)** - Custom web interface files from SD card
+  - **Button 2**: Stop/Reset active game, returns to idle screen
+  - **Button 3**: Debug Finish (configurable via menuconfig)
+- 🎵 **Audio feedback (optional)** - I2S audio via MAX98357A amplifier or simple buzzer
+- 💾 **SD Card support (optional)** - Custom web interface files and sound files from SD card
 
 > ℹ️ **Note**: Display, buttons, buzzer, and SD card are all **optional**. The system works perfectly with just the web interface for full remote control.
 
@@ -180,9 +179,8 @@ idf.py build flash monitor
 | 18 | OLED SCL | I2C Clock *(optional)* |
 | 5 | Buzzer | PWM Audio *(optional)* |
 | 1 | Button 1 | Start/Stop/Resume *(optional)* |
-| 3 | Button 2 | Pause/Resume *(optional)* |
-| 7 | Button 3 | Stop/Reset *(optional)* |
-| 6 | Button 4 | Reserved *(optional)* |
+| 3 | Button 2 | Stop/Reset *(optional)* |
+| 2 | Button 3 | Debug Finish *(optional, configurable)* |
 | 10 | SD CS | SD Card Chip Select *(optional)* |
 | 6 | SD CLK | SD Card Clock *(optional)* |
 | 2 | SD MISO | SD Card Data In *(optional)* |
@@ -298,6 +296,16 @@ Access the web interface by connecting to the main unit's WiFi network:
 - **Password**: lasergame (configurable)
 - **URL**: http://192.168.4.1
 
+### Screenshots
+
+<div align="center">
+  <img src="docs/main_screen.png" alt="Main Game Screen" width="600">
+  <p><em>Main Game Control Screen - Start games, monitor status, and control laser units</em></p>
+  
+  <img src="docs/sound_screen.png" alt="Sound Settings Screen" width="600">
+  <p><em>Sound Settings - Test audio playback and adjust volume settings</em></p>
+</div>
+
 ### Features
 - 🎮 Game control (start, stop, pause, resume)
 - 🔴 Individual laser ON/OFF control
@@ -319,7 +327,20 @@ You can customize the web interface by using an SD card:
    └── assets/       (optional)
        ├── logo.png
        └── sounds/
+   /sounds/          (for audio feedback - requires MAX98357A I2S amplifier)
+   ├── startup2.mp3  (system startup)
+   ├── button.mp3    (button press)
+   ├── start.mp3     (game start)
+   ├── beep.mp3      (countdown tick)
+   ├── bg.mp3        (background music - loop)
+   ├── penalty.mp3   (laser beam broken)
+   ├── finish.mp3    (game complete)
+   ├── stop.mp3      (game stopped)
+   ├── error.mp3     (error sound)
+   └── success.mp3   (success/confirmation)
    ```
+   
+   > 📢 **Note**: Sound files are MP3 format. WAV files also supported. Sounds are optional - system works with buzzer-only feedback if no I2S audio configured.
 3. **Enable SD Card** in menuconfig
 4. **Configure SPI pins** for SD card module
 5. **Insert SD card** into main unit

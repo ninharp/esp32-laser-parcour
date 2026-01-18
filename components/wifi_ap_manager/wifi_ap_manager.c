@@ -457,6 +457,13 @@ esp_err_t wifi_connect_sta(const char *ssid, const char *password, bool save_to_
     }
     wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     
+    // IDF 5.5.2 FIX: Must stop WiFi before changing config in started state
+    bool was_started = is_initialized;
+    if (was_started) {
+        ESP_LOGI(TAG, "Stopping WiFi to reconfigure...");
+        ESP_ERROR_CHECK(esp_wifi_stop());
+    }
+    
     // Set WiFi mode based on current state
     wifi_mode_t mode = (current_mode == WIFI_MANAGER_MODE_AP) ? WIFI_MODE_APSTA : WIFI_MODE_STA;
     ESP_ERROR_CHECK(esp_wifi_set_mode(mode));
@@ -467,30 +474,26 @@ esp_err_t wifi_connect_sta(const char *ssid, const char *password, bool save_to_
     sta_status = WIFI_STATUS_CONNECTING;
     xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
     
-    // Start or reconnect
-    if (!is_initialized) {
-        ESP_ERROR_CHECK(esp_wifi_start());
-        is_initialized = true;
-    } else {
-        // Check if already connected or connecting
-        wifi_ap_record_t ap_info;
-        esp_err_t check = esp_wifi_sta_get_ap_info(&ap_info);
-        
-        if (check == ESP_OK) {
-            // Already connected, no need to call esp_wifi_connect()
-            ESP_LOGI(TAG, "WiFi already connected to: %s", ap_info.ssid);
-        } else if (check == ESP_ERR_WIFI_NOT_CONNECT) {
-            // Not connected, safe to call connect
-            esp_err_t connect_ret = esp_wifi_connect();
-            if (connect_ret != ESP_OK && connect_ret != ESP_ERR_WIFI_CONN) {
-                // ESP_ERR_WIFI_CONN means already connecting, which is OK
-                ESP_ERROR_CHECK(connect_ret);
-            } else if (connect_ret == ESP_ERR_WIFI_CONN) {
-                ESP_LOGI(TAG, "WiFi already connecting, waiting for result...");
-            }
-        } else {
-            ESP_LOGW(TAG, "esp_wifi_sta_get_ap_info returned: %s", esp_err_to_name(check));
-        }
+    // Start WiFi (whether first time or restart)
+    ESP_LOGI(TAG, "%s WiFi...", was_started ? "Restarting" : "Starting");
+    ESP_ERROR_CHECK(esp_wifi_start());
+    is_initialized = true;
+    
+    // Connect to AP
+    wifi_ap_record_t ap_info;
+    esp_err_t check = esp_wifi_sta_get_ap_info(&ap_info);
+    
+    if (check == ESP_OK) {
+        // Already connected, disconnect first
+        ESP_LOGI(TAG, "Disconnecting from current AP: %s", ap_info.ssid);
+        esp_wifi_disconnect();
+        vTaskDelay(pdMS_TO_TICKS(100)); // Give time to disconnect
+    }
+    
+    // Connect to new/configured AP
+    esp_err_t connect_ret = esp_wifi_connect();
+    if (connect_ret != ESP_OK && connect_ret != ESP_ERR_WIFI_CONN) {
+        ESP_LOGW(TAG, "esp_wifi_connect failed: %s", esp_err_to_name(connect_ret));
     }
     
     // Wait for connection

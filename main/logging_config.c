@@ -20,22 +20,24 @@ void init_logging(void)
     // ========================================
     // PROJECT-SPECIFIC COMPONENTS (DEBUG)
     // ========================================
-    esp_log_level_set("LASER_PARCOUR", ESP_LOG_DEBUG);    // Main application
-    esp_log_level_set("GAME_LOGIC", ESP_LOG_DEBUG);       // Game state & scoring
+    esp_log_level_set("LASER_PARCOUR", ESP_LOG_INFO);    // Main application
+    esp_log_level_set("GAME_LOGIC", ESP_LOG_INFO);       // Game state & scoring
     esp_log_level_set("DISPLAY_MGR", ESP_LOG_INFO);      // Display manager
-    esp_log_level_set("SSD1306", ESP_LOG_DEBUG);          // SSD1306 OLED driver
-    esp_log_level_set("ESPNOW_MGR", ESP_LOG_DEBUG);       // ESP-NOW communication
-    esp_log_level_set("BUTTON", ESP_LOG_DEBUG);           // Button handler
-    esp_log_level_set("BUZZER", ESP_LOG_DEBUG);           // Buzzer/audio
-    esp_log_level_set("LASER_CTRL", ESP_LOG_DEBUG);       // Laser control
-    esp_log_level_set("SENSOR_MGR", ESP_LOG_DEBUG);       // Sensor manager
-    esp_log_level_set("WEB_SERVER", ESP_LOG_DEBUG);       // HTTP web server
-    esp_log_level_set("WIFI_AP_MGR", ESP_LOG_DEBUG);      // WiFi AP manager
-    esp_log_level_set("SD_CARD_MANAGER", ESP_LOG_DEBUG);  // SD card manager
+    esp_log_level_set("SSD1306", ESP_LOG_INFO);          // SSD1306 OLED driver
+    esp_log_level_set("ESPNOW_MGR", ESP_LOG_INFO);       // ESP-NOW communication
+    esp_log_level_set("BUTTON", ESP_LOG_INFO);           // Button handler
+    esp_log_level_set("BUZZER", ESP_LOG_INFO);           // Buzzer/audio
+    esp_log_level_set("LASER_CTRL", ESP_LOG_INFO);       // Laser control
+    esp_log_level_set("SENSOR_MGR", ESP_LOG_INFO);       // Sensor manager
+    esp_log_level_set("WEB_SERVER", ESP_LOG_INFO);       // HTTP web server
+    esp_log_level_set("WIFI_AP_MGR", ESP_LOG_INFO);      // WiFi AP manager
+    esp_log_level_set("SD_CARD_MANAGER", ESP_LOG_INFO);  // SD card manager
+    esp_log_level_set("SOUND_MGR", ESP_LOG_INFO);        // Sound manager
+    esp_log_level_set("AUDIO_OUT", ESP_LOG_INFO);        // Audio output manager
 
-    esp_log_level_set("MODULE_CTRL", ESP_LOG_DEBUG);    // Control module
-    esp_log_level_set("MODULE_LASER", ESP_LOG_DEBUG);    // Laser module
-    esp_log_level_set("MODULE_FINISH", ESP_LOG_DEBUG);   // Finish button module
+    esp_log_level_set("MODULE_CTRL", ESP_LOG_INFO);    // Control module
+    esp_log_level_set("MODULE_LASER", ESP_LOG_INFO);    // Laser module
+    esp_log_level_set("MODULE_FINISH", ESP_LOG_INFO);   // Finish button module
     
     // ========================================
     // ESP-IDF SYSTEM COMPONENTS

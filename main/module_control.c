@@ -14,6 +14,8 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "nvs_flash.h"
+#include <dirent.h>
+#include <sys/stat.h>
 
 // Component includes
 #include "display_manager.h"
@@ -23,6 +25,9 @@
 #include "web_server.h"
 #include "button_handler.h"
 #include "buzzer.h"
+#ifdef CONFIG_ENABLE_SOUND_MANAGER
+#include "sound_manager.h"
+#endif
 #include "sd_card_manager.h"
 
 static const char *TAG = "MODULE_CTRL";
@@ -36,13 +41,89 @@ static esp_timer_handle_t heartbeat_timer = NULL;
 // Last countdown value for buzzer triggering
 static int last_countdown_value = -1;
 
+// Beam break sound played flag
+static bool beam_break_sound_played = false;
+
+#ifdef CONFIG_ENABLE_SD_CARD
+/**
+ * List directory contents on SD card
+ */
+static void list_sd_directory(const char *path, int max_files)
+{
+    DIR *dir = opendir(path);
+    if (!dir) {
+        ESP_LOGI(TAG, "    Directory not found: %s", path);
+        return;
+    }
+    
+    ESP_LOGI(TAG, "    Contents of %s:", path);
+    struct dirent *entry;
+    int count = 0;
+    
+    while ((entry = readdir(dir)) != NULL && count < max_files) {
+        // Skip . and ..
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        char full_path[300];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+        
+        struct stat st;
+        if (stat(full_path, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                ESP_LOGI(TAG, "      [DIR]  %s", entry->d_name);
+            } else {
+                ESP_LOGI(TAG, "      [FILE] %s (%ld bytes)", entry->d_name, st.st_size);
+            }
+            count++;
+        }
+    }
+    
+    closedir(dir);
+    
+    if (count == 0) {
+        ESP_LOGI(TAG, "      (empty)");
+    } else if (count >= max_files) {
+        ESP_LOGI(TAG, "      ... (showing first %d entries)", max_files);
+    }
+}
+
+/**
+ * List SD card directory structure
+ */
+static void list_sd_card_structure(void)
+{
+    ESP_LOGI(TAG, "  SD Card Directory Structure:");
+    
+    // List root directory
+    list_sd_directory("/sdcard", 10);
+    
+    // List common directories if they exist
+    const char *important_dirs[] = {
+        "/sdcard/web",
+        "/sdcard/sounds",
+        // "/sdcard/logs",
+        // "/sdcard/config"
+    };
+    
+    for (int i = 0; i < sizeof(important_dirs) / sizeof(important_dirs[0]); i++) {
+        list_sd_directory(important_dirs[i], 10);
+    }
+}
+#endif
+
 /**
  * Heartbeat timer callback (Main Unit)
  * Sends periodic heartbeat to all laser units to keep safety timers alive
  */
 static void heartbeat_timer_callback(void *arg)
-{
-    // Send heartbeat broadcast to all units
+{    // Only send heartbeat if laser units are connected
+    if (!game_has_laser_units()) {
+        ESP_LOGD(TAG, "Skipping heartbeat - no laser units connected");
+        return;
+    }
+        // Send heartbeat broadcast to all units
     espnow_broadcast_message(MSG_HEARTBEAT, NULL, 0);
     ESP_LOGD(TAG, "Heartbeat broadcast sent to all units");
 }
@@ -52,7 +133,7 @@ static void heartbeat_timer_callback(void *arg)
  */
 static void display_update_task(void *pvParameters)
 {
-    ESP_LOGI(TAG, "Display update task started");
+    ESP_LOGD(TAG, "Display update task started");
     
     TickType_t last_wake_time = xTaskGetTickCount();
     const TickType_t update_interval = pdMS_TO_TICKS(100); // Update every 100ms
@@ -104,11 +185,11 @@ static void display_update_task(void *pvParameters)
                     }
                     display_countdown(countdown_remaining);
                     
-                    // Play buzzer beep on each countdown tick
+                    // Play audio beep on each countdown tick
                     if (countdown_remaining > 0 && last_countdown_value != countdown_remaining) {
                         last_countdown_value = countdown_remaining;
-                        buzzer_play_pattern(BUZZER_PATTERN_COUNTDOWN);
-                        ESP_LOGI(TAG, "Countdown beep: %lu", (unsigned long)countdown_remaining);
+                        sound_manager_play_event(SOUND_EVENT_COUNTDOWN, SOUND_MODE_ONCE);
+                        ESP_LOGD(TAG, "Countdown beep: %lu", (unsigned long)countdown_remaining);
                     }
                 }
                 break;
@@ -119,10 +200,15 @@ static void display_update_task(void *pvParameters)
                     display_game_status(player_data.elapsed_time, 
                                       player_data.beam_breaks);
                 }
+                beam_break_sound_played = false; // Reset beam break sound flag
                 break;
                 
             case GAME_STATE_PENALTY:
                 display_set_screen(SCREEN_GAME_PAUSED); // Reuse PAUSED screen for PENALTY
+                if (!beam_break_sound_played) {
+                    sound_manager_play_event(SOUND_EVENT_BEAM_BREAK, SOUND_MODE_ONCE);
+                    beam_break_sound_played = true;
+                }
                 if (game_get_player_data(&player_data) == ESP_OK) {
                     // Clear and show penalty message
                     display_clear();
@@ -150,6 +236,7 @@ static void display_update_task(void *pvParameters)
             case GAME_STATE_COMPLETE:
                 // Only display results once to avoid infinite logging
                 if (!complete_screen_shown) {
+                    sound_manager_play_event(SOUND_EVENT_SUCCESS, SOUND_MODE_ONCE);
                     display_set_screen(SCREEN_GAME_COMPLETE);
                     if (game_get_player_data(&player_data) == ESP_OK) {
                         display_game_results(player_data.elapsed_time,
@@ -202,7 +289,7 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
     ESP_LOGI(TAG, "Button %d event: %d", button_id, event);
     
     if (event == BUTTON_EVENT_CLICK) {
-        buzzer_play_pattern(BUZZER_PATTERN_BEEP);
+        // sound_manager_play_event(SOUND_EVENT_BUTTON_PRESS, SOUND_MODE_ONCE);
         
         switch (button_id) {
             case 0:  // Button 1 - Start/Stop
@@ -222,7 +309,7 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                             vTaskDelay(pdMS_TO_TICKS(5000));  // Show for 5 seconds
                             display_set_screen(SCREEN_IDLE);
                             display_update();
-                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            sound_manager_play_event(SOUND_EVENT_ERROR, SOUND_MODE_ONCE);
                             return;
                         }
                         
@@ -230,10 +317,10 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                         ESP_LOGI(TAG, "Starting game...");
                         esp_err_t ret = game_start(GAME_MODE_SINGLE_SPEEDRUN, "Player");
                         if (ret == ESP_OK) {
-                            buzzer_play_pattern(BUZZER_PATTERN_GAME_START);
+                            sound_manager_play_event(SOUND_EVENT_GAME_START, SOUND_MODE_ONCE);
                             ESP_LOGI(TAG, "Game started successfully");
                         } else {
-                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            sound_manager_play_event(SOUND_EVENT_ERROR, SOUND_MODE_ONCE);
                             ESP_LOGE(TAG, "Failed to start game: %s", esp_err_to_name(ret));
                         }
                     } else if (state == GAME_STATE_RUNNING || state == GAME_STATE_PENALTY) {
@@ -241,10 +328,10 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                         ESP_LOGI(TAG, "Stopping game...");
                         esp_err_t ret = game_stop();
                         if (ret == ESP_OK) {
-                            buzzer_play_pattern(BUZZER_PATTERN_GAME_END);
+                            sound_manager_play_event(SOUND_EVENT_GAME_STOP, SOUND_MODE_ONCE);
                             ESP_LOGI(TAG, "Game stopped");
                         } else {
-                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            sound_manager_play_event(SOUND_EVENT_ERROR, SOUND_MODE_ONCE);
                             ESP_LOGE(TAG, "Failed to stop game: %s", esp_err_to_name(ret));
                         }
                     } else if (state == GAME_STATE_PAUSED) {
@@ -254,40 +341,14 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                         if (ret == ESP_OK) {
                             ESP_LOGI(TAG, "Game resumed");
                         } else {
-                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            sound_manager_play_event(SOUND_EVENT_ERROR, SOUND_MODE_ONCE);
                             ESP_LOGE(TAG, "Failed to resume game: %s", esp_err_to_name(ret));
                         }
                     }
                 }
                 break;
                 
-            case 1:  // Button 2 - Pause/Resume
-                ESP_LOGI(TAG, "Pause/Resume button pressed");
-                {
-                    game_state_t state = game_get_state();
-                    if (state == GAME_STATE_RUNNING || state == GAME_STATE_PENALTY) {
-                        ESP_LOGI(TAG, "Pausing game...");
-                        esp_err_t ret = game_pause();
-                        if (ret == ESP_OK) {
-                            ESP_LOGI(TAG, "Game paused");
-                        } else {
-                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
-                            ESP_LOGE(TAG, "Failed to pause game: %s", esp_err_to_name(ret));
-                        }
-                    } else if (state == GAME_STATE_PAUSED) {
-                        ESP_LOGI(TAG, "Resuming game...");
-                        esp_err_t ret = game_resume();
-                        if (ret == ESP_OK) {
-                            ESP_LOGI(TAG, "Game resumed");
-                        } else {
-                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
-                            ESP_LOGE(TAG, "Failed to resume game: %s", esp_err_to_name(ret));
-                        }
-                    }
-                }
-                break;
-                
-            case 2:  // Button 3 - Reset/Stop
+            case 1:  // Button 2 - Reset/Stop
                 ESP_LOGI(TAG, "Reset button pressed");
                 {
                     game_state_t state = game_get_state();
@@ -295,10 +356,10 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                         ESP_LOGI(TAG, "Stopping game...");
                         esp_err_t ret = game_stop();
                         if (ret == ESP_OK) {
-                            buzzer_play_pattern(BUZZER_PATTERN_GAME_END);
+                            sound_manager_play_event(SOUND_EVENT_GAME_STOP, SOUND_MODE_ONCE);
                             ESP_LOGI(TAG, "Game stopped and reset");
                         } else {
-                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            sound_manager_play_event(SOUND_EVENT_ERROR, SOUND_MODE_ONCE);
                             ESP_LOGE(TAG, "Failed to stop game: %s", esp_err_to_name(ret));
                         }
                     }
@@ -308,18 +369,18 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                 }
                 break;
                 
-            case 3:  // Button 4 - Debug Finish Button
-#ifdef CONFIG_ENABLE_BUTTON4_DEBUG_FINISH
+            case 2:  // Button 3 - Debug Finish Button
+#ifdef CONFIG_ENABLE_BUTTON3_DEBUG_FINISH
                 {
                     game_state_t state = game_get_state();
                     if (state == GAME_STATE_RUNNING || state == GAME_STATE_PENALTY) {
                         ESP_LOGI(TAG, "Debug Finish button pressed - triggering game finish");
                         esp_err_t ret = game_finish();
                         if (ret == ESP_OK) {
-                            buzzer_play_pattern(BUZZER_PATTERN_SUCCESS);
+                            // sound_manager_play_event(SOUND_EVENT_SUCCESS, SOUND_MODE_ONCE);
                             ESP_LOGI(TAG, "Game finished (debug)");
                         } else {
-                            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+                            sound_manager_play_event(SOUND_EVENT_ERROR, SOUND_MODE_ONCE);
                             ESP_LOGE(TAG, "Failed to finish game: %s", esp_err_to_name(ret));
                         }
                     } else {
@@ -327,7 +388,7 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
                     }
                 }
 #else
-                ESP_LOGI(TAG, "Button 4 pressed (debug finish disabled)");
+                ESP_LOGI(TAG, "Button 3 pressed (debug finish disabled)");
 #endif
                 break;
         }
@@ -335,7 +396,7 @@ static void button_event_callback(uint8_t button_id, button_event_t event)
         // Long press on Button 1: Turn all lasers ON/OFF
         if (button_id == 0) {
             ESP_LOGI(TAG, "Long press on Start/Stop button - toggling all lasers");
-            buzzer_play_pattern(BUZZER_PATTERN_BEEP);
+            // sound_manager_play_event(SOUND_EVENT_BUTTON_PRESS, SOUND_MODE_ONCE);
             
             // Get all laser units
             laser_unit_info_t units[MAX_LASER_UNITS];
@@ -380,7 +441,7 @@ static esp_err_t game_control_callback(const char *command, const char *data)
     if (strcmp(command, "start") == 0) {
         ret = game_start(GAME_MODE_SINGLE_SPEEDRUN, "Web Player");
         if (ret == ESP_OK) {
-            buzzer_play_pattern(BUZZER_PATTERN_GAME_START);
+            sound_manager_play_event(SOUND_EVENT_GAME_START, SOUND_MODE_ONCE);
         } else if (ret == ESP_ERR_INVALID_STATE) {
             // Show error on display if no laser units
             display_clear();
@@ -392,10 +453,13 @@ static esp_err_t game_control_callback(const char *command, const char *data)
             vTaskDelay(pdMS_TO_TICKS(5000));  // Show for 5 seconds
             display_set_screen(SCREEN_IDLE);
             display_update();
-            buzzer_play_pattern(BUZZER_PATTERN_ERROR);
+            // TODO ifguards wenn no sound player
+            sound_manager_play_event(SOUND_EVENT_ERROR, SOUND_MODE_ONCE);
         }
     } else if (strcmp(command, "stop") == 0) {
-        buzzer_play_pattern(BUZZER_PATTERN_GAME_END);
+        #ifdef CONFIG_ENABLE_SOUND_MANAGER
+        sound_manager_play_event(SOUND_EVENT_GAME_STOP, SOUND_MODE_ONCE);
+        #endif
         ret = game_stop();
     } else if (strcmp(command, "pause") == 0) {
         ret = game_pause();
@@ -419,7 +483,7 @@ static esp_err_t game_control_callback(const char *command, const char *data)
  */
 static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_message_t *message)
 {
-    ESP_LOGI(TAG, "ESP-NOW message received from %02X:%02X:%02X:%02X:%02X:%02X",
+    ESP_LOGD(TAG, "ESP-NOW message received from %02X:%02X:%02X:%02X:%02X:%02X",
              sender_mac[0], sender_mac[1], sender_mac[2], 
              sender_mac[3], sender_mac[4], sender_mac[5]);
     
@@ -428,7 +492,7 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
     
     switch (message->msg_type) {
         case MSG_BEAM_BROKEN:
-            ESP_LOGW(TAG, "Beam broken on module %d!", message->module_id);
+            ESP_LOGI(TAG, "Beam broken on module %d!", message->module_id);
             game_beam_broken(message->module_id);
             break;
         case MSG_FINISH_PRESSED:
@@ -441,7 +505,7 @@ static void espnow_recv_callback_main(const uint8_t *sender_mac, const espnow_me
                 esp_err_t peer_ret = espnow_add_peer(sender_mac, message->module_id, 1);
                 if (peer_ret == ESP_OK) {
                     // Only log when peer is actually added (e.g., after main unit restart)
-                    ESP_LOGI(TAG, "Laser unit %d re-added as ESP-NOW peer", message->module_id);
+                    // ESP_LOGD(TAG, "Laser unit %d re-added as ESP-NOW peer", message->module_id);
                 } else if (peer_ret != ESP_ERR_ESPNOW_EXIST) {
                     ESP_LOGE(TAG, "Failed to add peer during heartbeat: %s", esp_err_to_name(peer_ret));
                 }
@@ -518,22 +582,21 @@ void module_control_init(void)
 
 #ifdef CONFIG_ENABLE_BUTTONS
     // Initialize buttons
-    button_config_t buttons[4] = {
+    button_config_t buttons[3] = {
         {.pin = CONFIG_BUTTON1_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true},
         {.pin = CONFIG_BUTTON2_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true},
-        {.pin = CONFIG_BUTTON3_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true},
-        {.pin = CONFIG_BUTTON4_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true}
+        {.pin = CONFIG_BUTTON3_PIN, .debounce_time_ms = CONFIG_DEBOUNCE_TIME, .long_press_time_ms = 1000, .pull_up = true, .active_low = true}
     };
     
     // Count enabled buttons
     uint8_t num_buttons = 0;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < MAX_BUTTONS; i++) {
         if (buttons[i].pin != -1) num_buttons++;
     }
     
     if (num_buttons > 0) {
         ESP_LOGI(TAG, "  Initializing %d buttons", num_buttons);
-        ESP_ERROR_CHECK(button_handler_init(buttons, 4, button_event_callback));
+        ESP_ERROR_CHECK(button_handler_init(buttons, 3, button_event_callback));
     } else {
         ESP_LOGI(TAG, "  Buttons disabled (all pins = -1)");
     }
@@ -548,7 +611,7 @@ void module_control_init(void)
     if (buzz_ret == ESP_OK) {
         ESP_LOGI(TAG, "  Buzzer initialized successfully");
         buzzer_set_volume(50); // 50% volume
-        buzzer_play_pattern(BUZZER_PATTERN_SUCCESS); // Startup sound
+        sound_manager_play_event(SOUND_EVENT_SUCCESS, SOUND_MODE_ONCE); // Startup sound
     } else {
         ESP_LOGW(TAG, "  Buzzer initialization failed (continuing without buzzer)");
     }
@@ -573,7 +636,22 @@ void module_control_init(void)
             } else {
                 ESP_LOGI(TAG, "  No /web directory on SD card, using internal interface");
             }
+            
+            // List SD card directory structure
+            list_sd_card_structure();
         }
+        
+#ifdef CONFIG_ENABLE_SOUND_MANAGER
+        // Initialize Sound Manager (requires SD card for audio files)
+        ESP_LOGI(TAG, "  Initializing Sound Manager (I2S Audio)...");
+        esp_err_t sound_ret = sound_manager_init(NULL);  // NULL = use menuconfig settings
+        if (sound_ret == ESP_OK) {
+            ESP_LOGI(TAG, "  Sound Manager initialized - audio playback enabled");
+            sound_manager_play_event(SOUND_EVENT_STARTUP, SOUND_MODE_ONCE);
+        } else {
+            ESP_LOGW(TAG, "  Sound Manager initialization failed, using buzzer fallback");
+        }
+#endif
     } else {
         ESP_LOGW(TAG, "  SD Card initialization failed (continuing without SD card)");
     }
@@ -603,12 +681,23 @@ void module_control_init(void)
         if (wifi_get_sta_ip(&ip_info) == ESP_OK) {
             ESP_LOGI(TAG, "  WiFi STA IP: " IPSTR, IP2STR(&ip_info.ip));
         }
+        
+        #ifdef CONFIG_ENABLE_SOUND_MANAGER
+        // Start HTTP streaming now that WiFi is connected
+        // ESP_LOGI(TAG, "  Starting audio streaming (WiFi connected)...");
+        // esp_err_t stream_ret = sound_manager_start_streaming();
+        // if (stream_ret == ESP_OK) {
+        //     ESP_LOGI(TAG, "  Audio streaming started");
+        // } else {
+        //     ESP_LOGW(TAG, "  Failed to start audio streaming: %s", esp_err_to_name(stream_ret));
+        // }
+        #endif
     } else {
         ESP_LOGI(TAG, "  Running in AP mode (Fallback): http://192.168.4.1");
     }
     
     // Initialize web server
-    ESP_LOGI(TAG, "  Initializing Web Server (http://192.168.4.1)");
+    ESP_LOGI(TAG, "  Initializing Web Server");
     ESP_ERROR_CHECK(web_server_init(NULL, game_control_callback));
     
     // Initialize ESP-NOW
@@ -664,8 +753,8 @@ void module_control_init(void)
     ESP_LOGI(TAG, "Display:        Disabled (menuconfig)");
 #endif
 #ifdef CONFIG_ENABLE_BUTTONS
-    ESP_LOGI(TAG, "Buttons:        B1=GPIO%d, B2=GPIO%d, B3=GPIO%d, B4=GPIO%d",
-             CONFIG_BUTTON1_PIN, CONFIG_BUTTON2_PIN, CONFIG_BUTTON3_PIN, CONFIG_BUTTON4_PIN);
+    ESP_LOGI(TAG, "Buttons:        B1=GPIO%d, B2=GPIO%d, B3=GPIO%d",
+             CONFIG_BUTTON1_PIN, CONFIG_BUTTON2_PIN, CONFIG_BUTTON3_PIN);
 #else
     ESP_LOGI(TAG, "Buttons:        Disabled (menuconfig)");
 #endif
@@ -673,6 +762,12 @@ void module_control_init(void)
     ESP_LOGI(TAG, "Buzzer:         GPIO%d", CONFIG_BUZZER_PIN);
 #else
     ESP_LOGI(TAG, "Buzzer:         Disabled (menuconfig)");
+#endif
+#ifdef CONFIG_ENABLE_SOUND_MANAGER
+    ESP_LOGI(TAG, "I2S Audio:      BCK=GPIO%d, WS=GPIO%d, DOUT=GPIO%d",
+             CONFIG_I2S_BCK_PIN, CONFIG_I2S_WS_PIN, CONFIG_I2S_DATA_OUT_PIN);
+#else
+    ESP_LOGI(TAG, "I2S Audio:      Disabled (menuconfig)");
 #endif
     ESP_LOGI(TAG, "WiFi Channel:   %d", CONFIG_WIFI_CHANNEL);
     ESP_LOGI(TAG, "ESP-NOW Ch:     %d", CONFIG_ESPNOW_CHANNEL);

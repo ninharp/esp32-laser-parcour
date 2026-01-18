@@ -35,7 +35,7 @@ static uint8_t main_unit_mac[6] = {0};  // MAC address of paired main unit
 
 // Safety mechanism
 static int64_t last_main_unit_heartbeat = 0;  // Timestamp of last heartbeat from main unit
-static const int64_t HEARTBEAT_TIMEOUT_US = 10000000;  // 10 seconds in microseconds
+static const int64_t HEARTBEAT_TIMEOUT_US = 30000000;  // 30 seconds in microseconds
 
 // Channel scanning state
 static uint8_t current_scan_channel = CONFIG_ESPNOW_CHANNEL;
@@ -337,6 +337,17 @@ static void espnow_recv_callback_laser(const uint8_t *sender_mac, const espnow_m
             
         case MSG_RESET:
             ESP_LOGI(TAG, "Reset command received");
+            
+            // Remove main unit from ESP-NOW peers if paired
+            if (is_paired) {
+                esp_err_t err = espnow_remove_peer(main_unit_mac);
+                if (err != ESP_OK) {
+                    ESP_LOGW(TAG, "Failed to remove peer: %s", esp_err_to_name(err));
+                } else {
+                    ESP_LOGI(TAG, "Main unit removed from ESP-NOW peers");
+                }
+            }
+            
             // Reset game mode
             is_game_mode = false;
             // Reset safety timer
