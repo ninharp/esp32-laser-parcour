@@ -47,3 +47,8 @@ flash_download_tool*/
 
 # Temporary files
 temp/
+version.h
+/version.txt
+
+# Distribution files
+dist/
