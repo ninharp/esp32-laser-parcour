@@ -62,8 +62,8 @@ FOREACH(LINE ${CONFIG_LINES})
 ENDFOREACH()
 
 # Firmware naming based on module role and ID
-set(DIST_ROLE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dist/${MODULE_ROLE_LOWER}")
 set(FIRMWARE_VERSION "v${VERSION_OUT}")
+set(DIST_ROLE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dist/${MODULE_ROLE_LOWER}/${FIRMWARE_VERSION}")
 set(FIRMWARE_OTA_NAME "firmware_${MODULE_ROLE_LOWER}_module_id_${MODULE_ID}_${FIRMWARE_VERSION}.bin")
 set(FIRMWARE_FULL_NAME "firmware_${MODULE_ROLE_LOWER}_module_id_${MODULE_ID}_${FIRMWARE_VERSION}_full.bin")
 
@@ -72,7 +72,7 @@ MESSAGE("  - OTA:  ${FIRMWARE_OTA_NAME}")
 MESSAGE("  - Full: ${FIRMWARE_FULL_NAME}")
 
 add_custom_target(merge
-                COMMENT "Merging firmware files and copying to dist/${MODULE_ROLE_LOWER}/"   
+                COMMENT "Merging firmware files and copying to dist/${MODULE_ROLE_LOWER}/${FIRMWARE_VERSION}/"   
                 COMMAND ${CMAKE_COMMAND} -E make_directory ${DIST_ROLE_DIR}
                 COMMAND ${ESPTOOLPY} merge_bin -o ${DIST_ROLE_DIR}/${FIRMWARE_FULL_NAME} @flash_project_args
                 COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_NAME}.bin ${DIST_ROLE_DIR}/${FIRMWARE_OTA_NAME}
