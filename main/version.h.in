@@ -1,0 +1,88 @@
+#ifndef __VERSION_H__
+#define __VERSION_H__
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/********************************************************************************************************************
+ * Global Versioning Information Header
+ * 
+ * In this file you will find all relevant version information which could used in the whole application.
+ * 
+ * 
+ * How to use?
+ * 
+ * To use this file you need to create a version.txt file in the root of your project
+ * and add 2 lines of code into your root CMakeLists.txt
+ * 
+ * The version.txt file only must hold the version itself without additional tags
+ * for example "1.0.0.0" as the only content of version.txt for version 1.0.0.0
+ * 
+ * The modifications in the CMakeLists.txt are descibed as follows
+ * 
+ * Before the call to the project(YOUR_PROJECT_NAME) macro of the ESP-IDF add the following line:
+ * 
+ * include(${CMAKE_CURRENT_SOURCE_DIR}/tools/project.cmake)
+ * 
+ * And after the project(...) call add the call to the version bump function
+ * 
+ * dd_version_info()
+ * 
+ * Thats all, now on every build the version build part increases by one 
+ * 
+ * Globally there are a few defines specified for version information.
+ * 
+ * SDK_PROJECT                  The name of the application (set in root CMakeLists.txt file)
+ * PROJECT_GIT_REV                      GIT reference string
+ * PROJECT_GIT_TAG                      GIT tag (if assigned in GIT)
+ * PROJECT_GIT_BRANCH                   GIT branch the build was compiled with
+ * PROJECT_FULL_VERSION                 String representation of the version (w/o prefix)
+ * PROJECT_FULL_VERSION_STRING          String representation of the version (including prefixes and the git rev)
+ * PROJECT_FULL_VERSION_NAME            String representation of the project name with the QCX_FULL_VERSION as prefix
+ * 
+ * You can also create you own defines in the version.h.in template file.
+ * There you can use the following placeholders:
+ * (All placeholders must be in between @ characters)
+ * 
+ * PROJECT_NAME                     Assigned project name
+ * PROJECT_VERSION_PREFIX           Prefix of the version string
+ * PROJECT_VERSION_MAJOR            Major of the version as integer
+ * PROJECT_VERSION_MINOR            Minor of the version as integer
+ * PROJECT_VERSION_PATCH            Patch level of the version as integer
+ * PROJECT_VERSION_TWEAK            Tweak level of the version as integer
+ * 
+ * 
+ ********************************************************************************************************************/
+
+/* Includes ------------------------------------------------------------------*/
+#include "sdkconfig.h"
+/* Defines -------------------------------------------------------------------*/
+
+/* Global Project Name String */
+#define SDK_PROJECT "@PROJECT_NAME@"
+
+#define PROJECT_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define PROJECT_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define PROJECT_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define PROJECT_VERSION_TWEAK @PROJECT_VERSION_TWEAK@
+#define PROJECT_VERSION "@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@.@PROJECT_VERSION_TWEAK@"
+
+/* Additional Version GIT information */
+#define PROJECT_GIT_REV "@GIT_REV@@GIT_DIFF@"
+#define PROJECT_GIT_TAG "@GIT_TAG@"
+#define PROJECT_GIT_BRANCH "@GIT_BRANCH@"
+
+/* Build information */
+#define PROJECT_BUILD_TIME __DATE__ " " __TIME__
+
+/* Full Global Version Strings */
+#define PROJECT_FULL_VERSION "V@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@.@PROJECT_VERSION_TWEAK@"
+#define PROJECT_FULL_VERSION_STRING "V@PROJECT_VERSION_PREFIX@@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@.@PROJECT_VERSION_TWEAK@-@GIT_REV@@GIT_DIFF@"
+#define PROJECT_FULL_VERSION_NAME "@PROJECT_NAME@_" PROJECT_FULL_VERSION_STRING
+
+#ifdef _cplusplus
+}
+#endif
+
+#endif // __VERSION_H__
